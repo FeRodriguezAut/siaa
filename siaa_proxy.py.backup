@@ -1,0 +1,677 @@
+"""
+SIAA - Servidor Proxy Inteligente v5.0
+=======================================
+Versión: 1.4.0
+Cambios vs v4:
+  - num_ctx 1024 → 2048 (elimina 500 por overflow de contexto)
+  - SQL: formato texto plano en lugar de tablas Markdown (ahorra 40% tokens)
+  - SQL: máximo 8 filas por consulta (antes 20)
+  - Fragmento .md: 800 chars, solo párrafo exacto más siguiente (antes 1800)
+  - System prompt compacto (menos tokens fijos)
+  - Enrutamiento de 2 niveles con DOCUMENTOS_PALABRAS_CLAVE
+
+Instalación: pip install flask flask-cors requests waitress
+"""
+
+import sqlite3
+import os
+import re
+import glob
+import threading
+import time
+import requests
+from flask import Flask, request, Response, stream_with_context, jsonify
+from flask_cors import CORS
+
+app = Flask(__name__)
+CORS(app)
+
+# ================================================================
+#  CONFIGURACIÓN
+# ================================================================
+
+OLLAMA_URL              = "http://localhost:11434"
+MODEL                   = "deepseek-r1:8b"
+MAX_OLLAMA_SIMULTANEOS  = 2
+HILOS_SERVIDOR          = 16
+TIMEOUT_CONEXION        = 8
+TIMEOUT_RESPUESTA       = 120
+TIMEOUT_HEALTH          = 8
+
+# ================================================================
+#  BASES DE DATOS
+# ================================================================
+
+BASES_DE_DATOS = {
+    "casos_2025": {
+        "ruta":        r"/opt/siaa/db_institucional.db",
+        "descripcion": "Casos soporte TI 2025 — Seccional Bucaramanga",
+        "palabras_clave": [
+            "caso", "casos", "incidente", "incidentes", "solicitud", "solicitudes",
+            "cuántos", "cuantos", "total", "conteo", "cantidad",
+            "técnico", "tecnico", "propietario",
+            "bucaramanga", "barrancabermeja", "san gil", "socorro", "girón",
+            "floridablanca", "piedecuesta", "vélez", "malaga", "municipio",
+            "enero", "febrero", "marzo", "abril", "mayo", "junio",
+            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+            "mes", "meses", "servicio", "servicios", "categoria",
+            "ans", "atención", "atencion", "sla", "cumpl",
+            "resumen", "estadística", "estadistica", "reporte", "informe",
+            "despacho", "sede", "juzgado", "soporte", "2025",
+        ],
+    },
+}
+
+CARPETA_FUENTES = r"/opt/siaa/fuentes"
+
+# ── Palabras clave explícitas por documento ──────────────────────
+DOCUMENTOS_PALABRAS_CLAVE = {
+    "administrativ_juzgado.md": [
+        "administrativo", "juzgado administrativo", "sierju administrativo",
+        "formulario administrativo", "instancia administrativa",
+        "nulidad", "reparacion directa", "contractual"
+    ],
+    "juzgado_administrativo.md": [
+        "juzgado administrativo oral", "administrativo 2022", "medio de control",
+        "nulidad restablecimiento", "reparacion directa juzgado",
+        "accion popular juzgado", "tutela administrativa"
+    ],
+    "conten_adtivo_trib.md": [
+        "contencioso tribunal", "tribunal contencioso administrativo",
+        "segunda instancia administrativa", "apelacion administrativa"
+    ],
+    "tribunal_administrativo.md": [
+        "tribunal administrativo", "sala tribunal administrativo",
+        "contencioso administrativo sala", "nulidad tribunal administrativo"
+    ],
+    "civil_circuito.md": [
+        "civil circuito", "juzgado civil circuito", "ordinario civil",
+        "abreviado civil", "verbal civil circuito"
+    ],
+    "civil_ccto_ejecucion_de_sentencias.md": [
+        "civil circuito ejecucion", "ejecucion sentencias circuito civil",
+        "juzgado civil circuito ejecucion", "cobro coactivo circuito"
+    ],
+    "civil_mpal_ejecucion_de_sentencias.md": [
+        "civil municipal ejecucion", "ejecucion sentencias municipal civil",
+        "juzgado civil municipal ejecucion", "cobro coactivo municipal"
+    ],
+    "juzgado_civil_municipal.md": [
+        "civil municipal", "juzgado civil municipal", "pequeñas causas civil",
+        "competencia multiple", "verbal sumario"
+    ],
+    "civil_tierras_ccto.md": [
+        "tierras", "restitucion", "restitución de tierras",
+        "despojo", "victimas tierras", "ley 1448"
+    ],
+    "juzgado_familia.md": [
+        "familia", "juzgado familia", "divorcio", "separacion cuerpos",
+        "custodia", "alimentos", "adopcion", "filiacion", "union marital"
+    ],
+    "juz_ejecuc_familia.md": [
+        "familia ejecucion", "juzgado familia ejecucion",
+        "alimentos ejecucion", "cuota alimentaria ejecucion"
+    ],
+    "prom_familia.md": [
+        "promiscuo familia", "juzgado promiscuo familia", "mixto familia"
+    ],
+    "juz_laboral.md": [
+        "laboral circuito", "juzgado laboral circuito",
+        "fuero sindical", "reintegro laboral", "despido laboral circuito"
+    ],
+    "juzgado_laboral_pequenas_causas.md": [
+        "pequeñas causas laborales", "laboral pequeñas causas",
+        "oral laboral pequeñas", "minima cuantia laboral"
+    ],
+    "juzgado_penal_circuito.md": [
+        "penal circuito", "juzgado penal circuito",
+        "ley 906 circuito", "delito circuito penal"
+    ],
+    "juzgado_penal_circuito_especializado.md": [
+        "penal especializado", "juzgado especializado penal",
+        "crimen organizado", "terrorismo", "narcotrafico", "concierto delinquir"
+    ],
+    "juzgado_penal_mpal.md": [
+        "penal municipal", "juzgado penal municipal",
+        "contravencional", "flagrancia municipal"
+    ],
+    "juzgado_penal_de_circuito_de_adolescentes.md": [
+        "adolescentes", "penal adolescentes", "menor infractor",
+        "srpa", "ley 1098", "codigo infancia"
+    ],
+    "juz_epms.md": [
+        "epms", "ejecucion penas", "medidas de seguridad",
+        "libertad condicional", "prision domiciliaria"
+    ],
+    "juzg_promiscuo_circuito.md": [
+        "promiscuo circuito", "juzgado promiscuo circuito", "mixto circuito"
+    ],
+    "juzg_promiscuo_municipal.md": [
+        "promiscuo municipal", "juzgado promiscuo municipal", "mixto municipal"
+    ],
+    "civil_familia_laboral.md": [
+        "tribunal superior civil familia laboral", "sala civil familia laboral",
+        "segunda instancia civil familia", "apelacion tribunal superior"
+    ],
+    "sala_civil_familia.md": [
+        "sala civil familia tribunal", "tribunal civil familia",
+        "apelacion civil familia tribunal"
+    ],
+    "sala_laboral.md": [
+        "sala laboral tribunal", "tribunal laboral superior",
+        "apelacion laboral tribunal"
+    ],
+    "sala_penal_tribunal_superior.md": [
+        "sala penal tribunal", "tribunal penal superior",
+        "apelacion penal tribunal", "tribunal superior penal"
+    ],
+    "disciplinaria.md": [
+        "disciplinaria", "disciplina judicial", "comision seccional disciplina",
+        "proceso disciplinario", "queja disciplinaria", "sancion disciplinaria"
+    ],
+}
+
+# ── System prompt compacto ───────────────────────────────────────
+SYSTEM_BASE = """Eres SIAA, asistente judicial Seccional Bucaramanga.
+Identifica mentalmente el tipo de despacho o proceso antes de responder.
+Responde SOLO lo preguntado. Máximo 3 líneas.
+PROHIBIDO: explicaciones, introducciones, conclusiones."""
+
+# ================================================================
+#  MONITOR OLLAMA
+# ================================================================
+
+ollama_estado = {"disponible": False, "ultimo_check": 0, "fallos": 0}
+ollama_lock   = threading.Lock()
+
+def verificar_ollama() -> bool:
+    try:
+        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=TIMEOUT_HEALTH)
+        ok = r.status_code == 200
+    except:
+        ok = False
+    with ollama_lock:
+        ollama_estado["disponible"] = ok
+        ollama_estado["ultimo_check"] = time.time()
+        ollama_estado["fallos"] = 0 if ok else ollama_estado["fallos"] + 1
+    return ok
+
+def monitor_ollama():
+    while True:
+        verificar_ollama()
+        time.sleep(10)
+
+threading.Thread(target=monitor_ollama, daemon=True).start()
+
+# ================================================================
+#  SEMÁFORO Y CONTADORES
+# ================================================================
+
+ollama_semaforo  = threading.Semaphore(MAX_OLLAMA_SIMULTANEOS)
+usuarios_activos = 0
+total_atendidos  = 0
+contadores_lock  = threading.Lock()
+
+def inc_activos():
+    global usuarios_activos, total_atendidos
+    with contadores_lock:
+        usuarios_activos += 1
+        total_atendidos  += 1
+
+def dec_activos():
+    global usuarios_activos
+    with contadores_lock:
+        usuarios_activos = max(0, usuarios_activos - 1)
+
+# ================================================================
+#  DOCUMENTOS
+# ================================================================
+
+documentos_cargados = {}
+documentos_lock     = threading.Lock()
+
+def cargar_documentos():
+    global documentos_cargados
+    nuevos = {}
+    if not os.path.exists(CARPETA_FUENTES):
+        os.makedirs(CARPETA_FUENTES, exist_ok=True)
+        return
+    archivos = (glob.glob(os.path.join(CARPETA_FUENTES, "*.md")) +
+                glob.glob(os.path.join(CARPETA_FUENTES, "*.txt")))
+    for ruta in archivos:
+        try:
+            nombre = os.path.basename(ruta).lower()
+            with open(ruta, "r", encoding="utf-8", errors="ignore") as f:
+                contenido = f.read()
+            palabras = set(re.findall(r'\b[a-záéíóúüñ]{4,}\b', contenido.lower()))
+            nuevos[nombre] = {"ruta": ruta, "contenido": contenido,
+                              "palabras_clave": palabras, "tamano": len(contenido)}
+            print(f"  [Doc] {nombre} ({len(contenido):,} chars)")
+        except Exception as e:
+            print(f"  [Doc] Error {ruta}: {e}")
+    with documentos_lock:
+        documentos_cargados = nuevos
+    print(f"  [Doc] Total: {len(nuevos)} documentos")
+
+# ================================================================
+#  ENRUTADOR — 2 niveles
+# ================================================================
+
+def detectar_fuentes(pregunta: str) -> dict:
+    p   = pregunta.lower()
+    res = {"bases_de_datos": [], "documentos": []}
+
+    # Bases de datos
+    for nombre_bd, config in BASES_DE_DATOS.items():
+        if any(kw in p for kw in config["palabras_clave"]):
+            res["bases_de_datos"].append(nombre_bd)
+
+    # Nivel 1: palabras clave explícitas
+    encontrados = []
+    for nombre_doc, keywords in DOCUMENTOS_PALABRAS_CLAVE.items():
+        if nombre_doc in documentos_cargados and any(kw in p for kw in keywords):
+            encontrados.append(nombre_doc)
+
+    if encontrados:
+        if len(encontrados) > 2:
+            scored = []
+            for nombre in encontrados:
+                kws   = DOCUMENTOS_PALABRAS_CLAVE[nombre]
+                score = sum(1 for kw in kws if kw in p)
+                scored.append((score, nombre))
+            scored.sort(reverse=True)
+            res["documentos"] = [n for _, n in scored[:2]]
+        else:
+            res["documentos"] = encontrados
+    else:
+        # Nivel 2: fallback automático
+        palabras = set(re.findall(r'\b[a-záéíóúüñ]{4,}\b', p))
+        with documentos_lock:
+            docs = dict(documentos_cargados)
+        scored = []
+        for nombre, doc in docs.items():
+            score = len(palabras & doc["palabras_clave"])
+            if score >= 2:
+                scored.append((score, nombre))
+        scored.sort(reverse=True)
+        res["documentos"] = [n for _, n in scored[:2]]
+
+    return res
+
+# ================================================================
+#  SQL — formato texto plano (ahorra tokens vs tablas Markdown)
+# ================================================================
+
+def generar_consultas_sql(pregunta: str, nombre_bd: str) -> list:
+    p = pregunta.lower()
+    consultas = []
+    if nombre_bd == "casos_2025":
+
+        if any(w in p for w in ["total","cuántos","cuantos","hay","registros","casos"]):
+            consultas.append(("Total por tipo",
+                "SELECT tipo_caso, COUNT(*) as total FROM año2025 GROUP BY tipo_caso ORDER BY total DESC"))
+
+        municipios = {
+            "bucaramanga":"Bucaramanga","barrancabermeja":"Barrancabermeja",
+            "san gil":"San Gil","socorro":"Socorro","floridablanca":"Floridablanca",
+            "girón":"Girón","giron":"Girón","piedecuesta":"Piedecuesta",
+            "vélez":"Vélez","velez":"Vélez","málaga":"Málaga","malaga":"Málaga",
+        }
+        for kw, nombre in municipios.items():
+            if kw in p:
+                tipo = ("AND tipo_caso='Incidentes'" if "incidente" in p else
+                        "AND tipo_caso='Solicitudes'" if "solicitud" in p else "")
+                consultas.append((f"Casos {nombre}",
+                    f"SELECT tipo_caso, COUNT(*) as total FROM año2025 "
+                    f"WHERE municipio='{nombre}' {tipo} GROUP BY tipo_caso"))
+                break
+
+        if "municipio" in p and not any(m in p for m in municipios):
+            consultas.append(("Por municipio",
+                "SELECT municipio, COUNT(*) as total FROM año2025 "
+                "GROUP BY municipio ORDER BY total DESC LIMIT 8"))
+
+        if any(w in p for w in ["técnico","tecnico","propietario","quien","quién","atendió"]):
+            consultas.append(("Top técnicos",
+                "SELECT propietario, COUNT(*) as casos FROM año2025 "
+                "GROUP BY propietario ORDER BY casos DESC LIMIT 8"))
+
+        meses = {"enero":"01","febrero":"02","marzo":"03","abril":"04",
+                 "mayo":"05","junio":"06","julio":"07","agosto":"08",
+                 "septiembre":"09","octubre":"10","noviembre":"11","diciembre":"12"}
+        for mes_nom, mes_num in meses.items():
+            if mes_nom in p:
+                consultas.append((f"Casos {mes_nom.capitalize()}",
+                    f"SELECT tipo_caso, COUNT(*) as total FROM año2025 "
+                    f"WHERE strftime('%m',creado_el)='{mes_num}' GROUP BY tipo_caso"))
+                break
+
+        if any(w in p for w in ["mes","meses","mensual"]) and not any(m in p for m in meses):
+            consultas.append(("Mensual",
+                """SELECT CASE strftime('%m',creado_el)
+                   WHEN '01' THEN 'Ene' WHEN '02' THEN 'Feb' WHEN '03' THEN 'Mar'
+                   WHEN '04' THEN 'Abr' WHEN '05' THEN 'May' WHEN '06' THEN 'Jun'
+                   WHEN '07' THEN 'Jul' WHEN '08' THEN 'Ago' WHEN '09' THEN 'Sep'
+                   WHEN '10' THEN 'Oct' WHEN '11' THEN 'Nov' WHEN '12' THEN 'Dic'
+                   END as mes, COUNT(*) as total
+                   FROM año2025 GROUP BY strftime('%m',creado_el)
+                   ORDER BY strftime('%m',creado_el)"""))
+
+        if any(w in p for w in ["servicio","servicios","categoria"]):
+            consultas.append(("Por servicio",
+                "SELECT servicio, COUNT(*) as total FROM año2025 "
+                "GROUP BY servicio ORDER BY total DESC LIMIT 8"))
+
+        # Búsqueda por hardware o periférico específico
+        hardware_lista = [
+            "mouse","teclado","monitor","impresora","scanner","escaner",
+            "ups","diadema","camara","disco","memoria","cable",
+            "garantia","garantías","garantias","equipo","computador",
+            "laptop","portatil","portátil","telefono","teléfono"
+        ]
+        for hw in hardware_lista:
+            if hw in p:
+                consultas.append((f"Casos '{hw}'",
+                    f"SELECT municipio, COUNT(*) as total FROM año2025 "
+                    f"WHERE LOWER(servicio) LIKE '%{hw}%' "
+                    f"OR LOWER(descripcion) LIKE '%{hw}%' "
+                    f"GROUP BY municipio ORDER BY total DESC LIMIT 8"))
+                break
+
+        if any(w in p for w in ["ans","sla","cumpl","atención","atencion"]):
+            consultas.append(("ANS Atención",
+                'SELECT "¿cumplió_ans_de_atención?", COUNT(*) as total '
+                'FROM año2025 GROUP BY "¿cumplió_ans_de_atención?"'))
+            consultas.append(("ANS Solución",
+                'SELECT "¿cumplió_ans_de_solución?", COUNT(*) as total '
+                'FROM año2025 GROUP BY "¿cumplió_ans_de_solución?"'))
+
+        if any(w in p for w in ["resumen","estadística","estadistica","informe","general"]):
+            consultas = [
+                ("Tipos","SELECT tipo_caso, COUNT(*) as total FROM año2025 GROUP BY tipo_caso"),
+                ("Municipios","SELECT municipio, COUNT(*) as total FROM año2025 GROUP BY municipio ORDER BY total DESC LIMIT 5"),
+                ("Técnicos","SELECT propietario, COUNT(*) as casos FROM año2025 GROUP BY propietario ORDER BY casos DESC LIMIT 5"),
+            ]
+
+        if any(w in p for w in ["despacho","juzgado"]):
+            consultas.append(("Por despacho",
+                "SELECT despacho, COUNT(*) as total FROM año2025 "
+                "WHERE despacho IS NOT NULL GROUP BY despacho ORDER BY total DESC LIMIT 8"))
+
+        if not consultas:
+            consultas.append(("Resumen básico",
+                "SELECT tipo_caso, COUNT(*) as total FROM año2025 GROUP BY tipo_caso"))
+
+    return consultas
+
+
+def ejecutar_sql(nombre_bd: str, consultas: list) -> str:
+    """Retorna resultados en texto plano (no tablas Markdown) para ahorrar tokens."""
+    config = BASES_DE_DATOS[nombre_bd]
+    try:
+        conn   = sqlite3.connect(config["ruta"], check_same_thread=False)
+        cursor = conn.cursor()
+        res    = f"[DATOS BD: {config['descripcion']}]\n"
+        for desc, sql in consultas:
+            try:
+                cursor.execute(sql)
+                cols = [d[0] for d in cursor.description]
+                rows = cursor.fetchall()
+                if not rows:
+                    continue
+                res += f"{desc}: "
+                # Formato compacto: "col1=val1, col2=val2 | col1=val1..."
+                lineas = []
+                for row in rows[:8]:   # máximo 8 filas
+                    lineas.append(", ".join(
+                        f"{cols[i]}={row[i]}" for i in range(len(cols))
+                        if row[i] is not None
+                    ))
+                res += " | ".join(lineas) + "\n"
+            except Exception as e:
+                res += f"[Error {desc}: {e}]\n"
+        conn.close()
+        return res
+    except Exception as e:
+        return f"[Error BD: {e}]\n"
+
+
+def extraer_fragmento(nombre_doc: str, pregunta: str, max_chars: int = 800) -> str:
+    """Extrae el fragmento más relevante. Máximo 800 chars para preservar tokens."""
+    with documentos_lock:
+        doc = documentos_cargados.get(nombre_doc)
+    if not doc:
+        return ""
+
+    palabras        = set(re.findall(r'\b[a-záéíóúüñ]{4,}\b', pregunta.lower()))
+    pregunta_lower  = pregunta.lower().replace('?','').replace('¿','').strip()
+    parrafos        = re.split(r'\n{1,}', doc["contenido"])
+
+    scored = []
+    for i, par in enumerate(parrafos):
+        par_lower = par.lower()
+        score     = sum(1 for p in palabras if p in par_lower)
+        if par.strip().startswith('#') and score > 0:
+            score += 5
+        if pregunta_lower in par_lower:
+            score += 10
+        if score > 0:
+            scored.append((score, i, par))
+
+    scored.sort(reverse=True)
+
+    fragmentos, total, indices = [], 0, set()
+    for _, idx, par in scored[:2]:
+        for j in range(idx, min(idx + 5, len(parrafos))):
+            if j not in indices and total + len(parrafos[j]) <= max_chars:
+                fragmentos.append(parrafos[j])
+                indices.add(j)
+                total += len(parrafos[j])
+
+    if not fragmentos:
+        fragmentos = [doc["contenido"][:max_chars]]
+
+    nombre_limpio = os.path.splitext(nombre_doc)[0].replace("_", " ").upper()
+    return f"[DOC: {nombre_limpio}]\n" + "\n".join(fragmentos) + "\n"
+
+# ================================================================
+#  OLLAMA — timeout duro + semáforo siempre liberado
+# ================================================================
+
+def llamar_ollama(ollama_messages: list) -> list:
+    adquirido = ollama_semaforo.acquire(timeout=30)
+    if not adquirido:
+        return ["COLA_LLENA"]
+    try:
+        resp = requests.post(
+            f"{OLLAMA_URL}/v1/chat/completions",
+            json={
+                "model":    MODEL,
+                "messages": ollama_messages,
+                "stream":   True,
+                "options":  {
+                    "temperature": 0.0,
+                    "num_predict": 120,
+                    "num_ctx":     2048,   # ← clave: evita 500 por overflow
+                    "stop": ["\n\n\n", "Espero", "Es importante",
+                             "Cabe destacar", "En resumen", "Además"]
+                }
+            },
+            stream=True,
+            timeout=(TIMEOUT_CONEXION, TIMEOUT_RESPUESTA)
+        )
+        if resp.status_code != 200:
+            return [f"ERROR_HTTP_{resp.status_code}"]
+        chunks = []
+        for line in resp.iter_lines():
+            if line:
+                chunks.append(line.decode("utf-8"))
+        return chunks
+    except requests.exceptions.ConnectTimeout:
+        with ollama_lock:
+            ollama_estado["disponible"] = False
+        return ["TIMEOUT_CONEXION"]
+    except requests.exceptions.ReadTimeout:
+        return ["TIMEOUT_RESPUESTA"]
+    except requests.exceptions.ConnectionError:
+        with ollama_lock:
+            ollama_estado["disponible"] = False
+        return ["OLLAMA_CAIDO"]
+    except Exception as e:
+        return [f"ERROR:{e}"]
+    finally:
+        ollama_semaforo.release()
+
+# ================================================================
+#  ENDPOINT PRINCIPAL
+# ================================================================
+
+@app.route("/siaa/chat", methods=["POST"])
+def chat():
+    inc_activos()
+    try:
+        data     = request.get_json()
+        messages = data.get("messages", [])
+        if not messages:
+            dec_activos()
+            return Response("Sin mensajes.", status=400)
+
+        with ollama_lock:
+            disponible = ollama_estado["disponible"]
+        if not disponible:
+            disponible = verificar_ollama()
+        if not disponible:
+            dec_activos()
+            return Response(
+                'data: {"choices":[{"delta":{"content":"Servidor IA no disponible. Intente en unos minutos."}}]}\ndata: [DONE]\n',
+                content_type="text/event-stream"
+            )
+
+        ultima_pregunta = next(
+            (m["content"] for m in reversed(messages) if m.get("role") == "user"), ""
+        )
+
+        # Contexto
+        fuentes  = detectar_fuentes(ultima_pregunta)
+        contexto = ""
+        for nombre_bd in fuentes["bases_de_datos"]:
+            consultas = generar_consultas_sql(ultima_pregunta, nombre_bd)
+            contexto += ejecutar_sql(nombre_bd, consultas)
+        for nombre_doc in fuentes["documentos"]:
+            contexto += extraer_fragmento(nombre_doc, ultima_pregunta)
+
+        # Mensajes para Ollama
+        ollama_msgs = [{"role": "system", "content": SYSTEM_BASE}]
+        if contexto.strip():
+            ollama_msgs.append({"role": "system", "content": contexto})
+        for msg in messages[-6:]:   # solo últimos 3 turnos
+            if msg.get("role") == "user":
+                ollama_msgs.append({
+                    "role":    "user",
+                    "content": msg["content"] + "\n[Máximo 3 líneas]"
+                })
+            elif msg.get("role") == "assistant":
+                ollama_msgs.append(msg)
+
+        def generate():
+            try:
+                chunks = llamar_ollama(ollama_msgs)
+                if not chunks:
+                    yield 'data: {"choices":[{"delta":{"content":"Sin respuesta."}}]}\n'
+                    return
+                errores = {
+                    "COLA_LLENA":        "Sistema ocupado. Intente en 30 segundos.",
+                    "TIMEOUT_CONEXION":  "IA no responde. Intente de nuevo.",
+                    "TIMEOUT_RESPUESTA": "Consulta muy lenta. Intente de nuevo.",
+                    "OLLAMA_CAIDO":      "Servidor IA reiniciándose. Espere 1 minuto.",
+                }
+                if chunks[0] in errores:
+                    msg = errores[chunks[0]]
+                    yield f'data: {{"choices":[{{"delta":{{"content":"{msg}"}}}}]}}\n'
+                    return
+                if chunks[0].startswith("ERROR"):
+                    yield 'data: {"choices":[{"delta":{"content":"Error interno."}}]}\n'
+                    return
+                for line in chunks:
+                    yield line + "\n"
+            finally:
+                dec_activos()
+
+        return Response(
+            stream_with_context(generate()),
+            content_type="text/event-stream",
+            headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
+        )
+    except Exception as e:
+        dec_activos()
+        return jsonify({"error": str(e)}), 500
+
+# ================================================================
+#  ENDPOINTS ADMIN
+# ================================================================
+
+@app.route("/siaa/status", methods=["GET"])
+def status():
+    bd_status = {}
+    for nombre, config in BASES_DE_DATOS.items():
+        try:
+            conn   = sqlite3.connect(config["ruta"], check_same_thread=False)
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' LIMIT 1")
+            tabla  = cursor.fetchone()
+            total  = 0
+            if tabla:
+                cursor.execute(f"SELECT COUNT(*) FROM \"{tabla[0]}\"")
+                total = cursor.fetchone()[0]
+            conn.close()
+            bd_status[nombre] = {"ok": True, "registros": total}
+        except Exception as e:
+            bd_status[nombre] = {"ok": False, "error": str(e)}
+    with ollama_lock:
+        ol_ok = ollama_estado["disponible"]
+        fallos = ollama_estado["fallos"]
+    return jsonify({
+        "estado": "ok" if ol_ok else "error",
+        "version": "1.4.0",
+        "ollama": ol_ok,
+        "ollama_fallos": fallos,
+        "usuarios_activos": usuarios_activos,
+        "total_atendidos": total_atendidos,
+        "bases_datos": bd_status,
+        "documentos": list(documentos_cargados.keys()),
+        "db": all(v["ok"] for v in bd_status.values()),
+        "db_casos": bd_status.get("casos_2025", {}).get("registros", 0)
+    })
+
+@app.route("/siaa/recargar", methods=["GET"])
+def recargar():
+    cargar_documentos()
+    return jsonify({"recargado": True, "documentos": list(documentos_cargados.keys())})
+
+# ================================================================
+#  ARRANQUE
+# ================================================================
+
+if __name__ == "__main__":
+    print("=" * 57)
+    print("  SIAA - Proxy Inteligente v1.4.0")
+    print(f"  num_ctx: 2048  |  num_predict: 120")
+    print(f"  Slots Ollama:  {MAX_OLLAMA_SIMULTANEOS}")
+    print(f"  Hilos servidor:{HILOS_SERVIDOR}")
+    print(f"  Documentos clave: {len(DOCUMENTOS_PALABRAS_CLAVE)}")
+    print("=" * 57)
+    cargar_documentos()
+    verificar_ollama()
+    with ollama_lock:
+        estado = "OK" if ollama_estado["disponible"] else "NO DISPONIBLE"
+    print(f"  Ollama: {estado}")
+    print("=" * 57)
+    try:
+        from waitress import serve
+        print("  Servidor: Waitress — 0.0.0.0:5000")
+        print("=" * 57)
+        serve(app, host="0.0.0.0", port=5000,
+              threads=HILOS_SERVIDOR, channel_timeout=180)
+    except ImportError:
+        print("  AVISO: instale waitress: pip install waitress")
+        app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
