@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIAA - Seccional Bucaramanga</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --judicial-blue: #1a2a6c;
+            --judicial-gold: #c5a059;
+            --judicial-light: #e8ecf8;
+            --bg: #f0f2f8;
+            --shadow: 0 4px 20px rgba(26,42,108,0.10);
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, sans-serif;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        header {
+            background: var(--judicial-blue);
+            color: white;
+            padding: 10px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 5px solid var(--judicial-gold);
+            flex-shrink: 0;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+        }
+        .logo-principal { height: 70px; width: auto; }
+        .escudo-rama    { height: 60px; width: auto; }
+        .texto-header h2   { margin: 0 0 2px 0; font-size: 1.35rem; letter-spacing: 2px; font-weight: 700; }
+        .texto-header span { color: var(--judicial-gold); font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; }
+        .version-badge { font-size: 0.65rem; color: rgba(255,255,255,0.5); letter-spacing: 1px; text-align: right; margin-top: 2px; }
+        #status-bar {
+            background: #fff;
+            border-bottom: 1px solid #dce3f0;
+            padding: 5px 32px;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        #connection-dot { width: 9px; height: 9px; border-radius: 50%; background: #ccc; display: inline-block; transition: background 0.4s; }
+        #connection-dot.ok       { background: #22c55e; }
+        #connection-dot.error    { background: #ef4444; }
+        #connection-dot.checking { background: #f59e0b; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        #connection-text { color: #475569; font-weight: 600; }
+
+        /* CRÍTICO: flex-direction column + min-height 0 resuelve el orden de mensajes */
+        #chat-box {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 24px 32px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-height: 0;
+        }
+        .message-row {
+            display: flex;
+            width: 100%;
+            gap: 12px;
+            animation: fadeIn 0.3s ease;
+            flex-shrink: 0;
+        }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        .bot-row  { justify-content: flex-start; }
+        .user-row { justify-content: flex-end; }
+        .bot-avatar {
+            width: 42px; height: 42px; border-radius: 8px;
+            background: white; border: 2px solid var(--judicial-gold);
+            flex-shrink: 0; object-fit: contain; padding: 3px;
+            align-self: flex-start;
+        }
+        .msg {
+            padding: 14px 20px; border-radius: 16px;
+            max-width: 72%; line-height: 1.65;
+            font-size: 0.97rem; box-shadow: var(--shadow);
+            word-break: break-word;
+        }
+        .user { background: var(--judicial-blue); color: white; border-top-right-radius: 3px; }
+        .bot  { background: white; color: #1e293b; border-top-left-radius: 3px; border-left: 5px solid var(--judicial-gold); }
+        .bot p { margin: 0 0 8px 0; }
+        .bot p:last-child { margin-bottom: 0; }
+        .bot ul, .bot ol { padding-left: 20px; margin: 6px 0; }
+        .bot li { margin-bottom: 4px; }
+        .bot code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.88em; }
+        .bot strong { color: var(--judicial-blue); }
+        .fuente-cita {
+            margin-top: 10px !important;
+            padding: 6px 10px !important;
+            background: #f8faff !important;
+            border-left: 3px solid var(--judicial-gold) !important;
+            border-radius: 0 6px 6px 0 !important;
+            font-size: 0.8em !important;
+            color: #475569 !important;
+            font-style: italic !important;
+        }
+        .typing-dots span {
+            display: inline-block; width: 7px; height: 7px;
+            background: var(--judicial-gold); border-radius: 50%; margin: 0 2px;
+            animation: bounce 1.2s infinite;
+        }
+        .typing-dots span:nth-child(2) { animation-delay: .2s; }
+        .typing-dots span:nth-child(3) { animation-delay: .4s; }
+        @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-7px)} }
+        #bottom-container {
+            background: white;
+            border-top: 2px solid var(--judicial-light);
+            padding: 14px 32px 18px;
+            flex-shrink: 0;
+            box-shadow: 0 -4px 20px rgba(26,42,108,0.08);
+        }
+        /* Bubble loading state */
+        .bot-loading {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .loading-label {
+            font-size: 0.78rem;
+            color: var(--judicial-gold);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            animation: fadeLabel 0.4s ease;
+        }
+        @keyframes fadeLabel { from { opacity:0; transform:translateX(-4px); } to { opacity:1; transform:translateX(0); } }
+
+        /* Panel de "thinking" — muestra los documentos encontrados */
+        .thinking-panel {
+            background: #f8faff;
+            border: 1px solid #dce3f0;
+            border-left: 3px solid var(--judicial-gold);
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            font-size: 0.78rem;
+            color: #475569;
+            animation: fadeLabel 0.3s ease;
+        }
+        .thinking-panel .thinking-title {
+            font-weight: 700;
+            color: var(--judicial-blue);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .thinking-panel .thinking-doc {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            margin: 3px 0;
+            line-height: 1.4;
+        }
+        .thinking-panel .thinking-doc::before {
+            content: "📄";
+            flex-shrink: 0;
+        }
+        .thinking-panel .thinking-excerpt {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 6px 10px;
+            margin-top: 6px;
+            font-style: italic;
+            font-size: 0.75rem;
+            color: #64748b;
+            max-height: 60px;
+            overflow: hidden;
+            position: relative;
+        }
+        .thinking-panel .thinking-excerpt::after {
+            content: "";
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 20px;
+            background: linear-gradient(transparent, white);
+        }
+        /* Colapsar el panel al llegar la respuesta */
+        .thinking-panel.collapsed {
+            padding: 6px 14px;
+            cursor: pointer;
+            opacity: 0.6;
+        }
+        .thinking-panel.collapsed .thinking-excerpt,
+        .thinking-panel.collapsed .thinking-doc { display: none; }
+        .thinking-panel.collapsed .thinking-title::after {
+            content: " (click para expandir)";
+            font-weight: 400;
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
+        .input-group { display: flex; gap: 10px; max-width: 1100px; margin: 0 auto; align-items: flex-end; }
+        textarea#userInput {
+            flex: 1; padding: 13px 18px;
+            border: 2px solid #c8d3e8; border-radius: 10px;
+            font-size: .97rem; outline: none; transition: border-color .25s;
+            background: #f8faff; color: #1e293b;
+            font-family: inherit; resize: none;
+            min-height: 48px; max-height: 120px;
+            overflow-y: auto; line-height: 1.5;
+        }
+        textarea#userInput:focus    { border-color: var(--judicial-blue); background: white; }
+        textarea#userInput:disabled { opacity: .6; cursor: not-allowed; }
+        .hint-text { text-align: center; font-size: 0.7rem; color: #94a3b8; margin-top: 6px; max-width: 1100px; margin-left: auto; margin-right: auto; }
+        button {
+            border: none; padding: 0 26px; border-radius: 10px;
+            cursor: pointer; font-weight: 700; font-size: .88rem;
+            color: white; transition: all .2s;
+            letter-spacing: .5px; text-transform: uppercase;
+            height: 48px; white-space: nowrap;
+        }
+        #sendBtn { background: var(--judicial-blue); }
+        #sendBtn:hover    { background: #243580; transform: scale(1.02); }
+        #sendBtn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+        #stopBtn { background: #b91c1c; display: none; }
+        #stopBtn:hover { background: #991818; }
+    </style>
+</head>
+<body>
+
+<header>
+    <img src="img/logo_completo.png" class="logo-principal" alt="SIAA" onerror="this.style.display='none'">
+    <div style="display:flex; align-items:center; gap:20px;">
+        <div class="texto-header" style="text-align:right;">
+            <h2>SIAA</h2>
+            <span>SECCIONAL BUCARAMANGA</span>
+            <div class="version-badge">v2.1.13</div>
+        </div>
+        <img src="img/Escudo-rama.png" class="escudo-rama" alt="Rama Judicial" onerror="this.style.display='none'">
+    </div>
+</header>
+
+<div id="status-bar">
+    <span id="connection-dot" class="checking"></span>
+    <span id="connection-text">Conectando con servidor IA...</span>
+</div>
+
+<div id="chat-box">
+    <div class="message-row bot-row">
+        <img src="img/logo_recortado.png" class="bot-avatar" alt="SIAA" onerror="this.style.display='none'">
+        <div class="msg bot">
+            <strong>¡Bienvenido al SIAA!</strong><br>
+            El Sistema Inteligente de Apoyo Administrativo está listo para atenderle.
+            Puede consultar normativa, procesos administrativos y documentación institucional
+            de la Seccional Bucaramanga.<br><br>
+            <em style="color:#64748b; font-size:.88em;">Escriba su consulta y presione CONSULTAR o Enter.</em>
+        </div>
+    </div>
+</div>
+
+<div id="bottom-container">
+    <!-- loading moved inside chat bubble -->
+    <div class="input-group">
+        <textarea id="userInput"
+            placeholder="Escriba su consulta administrativa aquí..."
+            autocomplete="off" rows="1"></textarea>
+        <button id="sendBtn" onclick="query()">CONSULTAR</button>
+        <button id="stopBtn" onclick="stopGeneration()">DETENER</button>
+    </div>
+    <div class="hint-text">↵ Enter = Enviar &nbsp;|&nbsp; Shift+Enter = Salto de línea</div>
+</div>
+
+<script>
+const SERVER_HOST = window.location.hostname || '172.16.60.56';
+const PROXY_URL   = `http://${SERVER_HOST}:5000`;
+
+const conversationHistory = [];
+let controller   = null;
+let waitInterval = null;
+let waitIdx      = 0;
+let isQuerying   = false;
+
+const waitingMessages = [
+    'Analizando requerimiento...',
+    'Consultando base de conocimiento...',
+    'Estructurando respuesta...',
+    'Procesando con IA local...'
+];
+
+async function checkConnection() {
+    const dot  = document.getElementById('connection-dot');
+    const text = document.getElementById('connection-text');
+    dot.className    = 'checking';
+    text.textContent = 'Conectando con servidor IA...';
+    try {
+        const res  = await fetch(`${PROXY_URL}/siaa/status`);
+        const data = await res.json();
+        if (data.estado === 'ok') {
+            dot.className    = 'ok';
+            text.textContent = `Servidor IA conectado ✓  |  ${data.total_documentos} documentos indexados`;
+        } else {
+            throw new Error();
+        }
+    } catch {
+        dot.className    = 'error';
+        text.textContent = '⚠ Servidor IA desconectado — Contacte al administrador del sistema';
+    }
+}
+
+function createBotAvatar() {
+    const img     = document.createElement('img');
+    img.src       = 'img/logo_recortado.png';
+    img.className = 'bot-avatar';
+    img.alt       = 'SIAA';
+    img.onerror   = () => { img.style.display = 'none'; };
+    return img;
+}
+
+// Agrega el mensaje del USUARIO al chat (siempre al final con appendChild)
+function renderUser(text) {
+    const chatBox = document.getElementById('chat-box');
+    const row     = document.createElement('div');
+    row.className = 'message-row user-row';
+    const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                        .replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    row.innerHTML = `<div class="msg user">${escaped}</div>`;
+    chatBox.appendChild(row);
+    scrollBottom();
+}
+
+function scrollBottom() {
+    requestAnimationFrame(() => {
+        const cb = document.getElementById('chat-box');
+        if (cb) cb.scrollTop = cb.scrollHeight;
+    });
+}
+
+// Destaca visualmente la línea de fuente bibliográfica
+function procesarFuente(html) {
+    return html.replace(
+        /<p>(📄\s*Fuente[s]?:.*?)<\/p>/gs,
+        '<div class="fuente-cita">$1</div>'
+    );
+}
+
+async function query() {
+    const input   = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const chatBox = document.getElementById('chat-box');
+
+    const text = input.value.trim();
+    if (!text || isQuerying) return;
+
+    isQuerying = true;
+
+    // PASO 1: Mensaje del usuario PRIMERO
+    renderUser(text);
+    conversationHistory.push({ role: 'user', content: text });
+    input.value = '';
+    input.style.height = 'auto';
+
+    input.disabled        = true;
+    sendBtn.disabled      = true;
+    sendBtn.style.display = 'none';
+    stopBtn.style.display = 'block';
+
+    // PASO 2: Burbuja del bot con loading + thinking simulation
+    const row    = document.createElement('div');
+    row.className = 'message-row bot-row';
+    const bubble = document.createElement('div');
+    bubble.className = 'msg bot';
+    bubble.id        = 'streaming-bubble';
+
+    // Estado inicial: puntos animados + etiqueta de estado
+    bubble.innerHTML = `<div class="bot-loading">
+        <span class="loading-label" id="loading-label">${waitingMessages[0]}</span>
+        <span class="typing-dots"><span></span><span></span><span></span></span>
+    </div>`;
+
+    row.appendChild(createBotAvatar());
+    row.appendChild(bubble);
+    chatBox.appendChild(row);
+    scrollBottom();
+
+    // Rotar los mensajes de espera dentro de la burbuja
+    waitIdx = 0;
+    waitInterval = setInterval(() => {
+        waitIdx = (waitIdx + 1) % waitingMessages.length;
+        const lbl = document.getElementById('loading-label');
+        if (lbl) {
+            lbl.style.animation = 'none';
+            lbl.offsetHeight;
+            lbl.style.animation = '';
+            lbl.textContent = waitingMessages[waitIdx];
+        }
+    }, 5000);
+
+    // ── THINKING SIMULATION ──────────────────────────────────────
+    // Consultar el enrutador para mostrar qué documentos se están
+    // buscando — feedback real del RAG, no texto inventado
+    let thinkingPanel = null;
+    try {
+        const qEnc = encodeURIComponent(text);
+        const rRes = await fetch(`${PROXY_URL}/siaa/enrutar?q=${qEnc}`);
+        const rData = await rRes.json();
+        const docs  = rData.docs_encontrados || [];
+
+        if (docs.length > 0) {
+            // Actualizar etiqueta de estado
+            const lbl = document.getElementById('loading-label');
+            if (lbl) lbl.textContent = 'Analizando documentos relevantes...';
+
+            // Construir panel de thinking con docs encontrados
+            const docsHtml = docs.map(d => {
+                const nombre = d.doc.replace(/_/g,' ').replace('.md','').toUpperCase();
+                const col    = d.coleccion ? ` <span style="color:#94a3b8">(${d.coleccion})</span>` : '';
+                return `<div class="thinking-doc">${nombre}${col}</div>`;
+            }).join('');
+
+            // Buscar un fragmento del primer documento para preview
+            let excerptHtml = '';
+            try {
+                const fRes  = await fetch(`${PROXY_URL}/siaa/fragmento?doc=${encodeURIComponent(docs[0].doc)}&q=${qEnc}`);
+                const fData = await fRes.json();
+                if (fData.fragmento) {
+                    // Extraer texto limpio del fragmento (sin etiquetas [DOC:...])
+                    const txt = fData.fragmento
+                        .replace(/\[DOC:.*?\]/g,'')
+                        .replace(/\[SEC:.*?\]/g,'')
+                        .replace(/═+/g,'')
+                        .replace(/\*\*/g,'')
+                        .trim()
+                        .substring(0, 200);
+                    if (txt.length > 30) {
+                        excerptHtml = `<div class="thinking-excerpt">"${txt}..."</div>`;
+                    }
+                }
+            } catch(_) {}
+
+            // Insertar panel thinking ANTES de los puntos animados
+            const botLoading = bubble.querySelector('.bot-loading');
+            if (botLoading) {
+                thinkingPanel = document.createElement('div');
+                thinkingPanel.className = 'thinking-panel';
+                thinkingPanel.innerHTML = `
+                    <div class="thinking-title">🔍 Buscando en documentos</div>
+                    ${docsHtml}
+                    ${excerptHtml}
+                `;
+                bubble.insertBefore(thinkingPanel, botLoading);
+                scrollBottom();
+            }
+        }
+    } catch(_) {
+        // Si falla el thinking, continuar sin él
+    }
+
+    const target = document.getElementById('streaming-bubble');
+    let accumulated = '';
+    controller = new AbortController();
+
+    try {
+        const response = await fetch(`${PROXY_URL}/siaa/chat`, {
+            method:  'POST',
+            signal:  controller.signal,
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ messages: conversationHistory })
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const reader  = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const lines = decoder.decode(value, { stream: true }).split('\n');
+            for (const line of lines) {
+                const clean = line.trim();
+                if (!clean || clean === 'data: [DONE]') continue;
+                try {
+                    const raw = clean.startsWith('data: ') ? clean.slice(6) : clean;
+                    const tok = JSON.parse(raw).choices?.[0]?.delta?.content;
+                    if (tok) {
+                        // Colapsar thinking panel al primer token real
+                        if (accumulated === '' && thinkingPanel) {
+                            thinkingPanel.classList.add('collapsed');
+                            thinkingPanel.title = 'Click para ver documentos consultados';
+                            thinkingPanel.querySelector('.thinking-title').textContent = '🔍 Documentos consultados';
+                            thinkingPanel.onclick = () => thinkingPanel.classList.toggle('collapsed');
+                        }
+                        accumulated += tok;
+                        target.innerHTML = (thinkingPanel ? thinkingPanel.outerHTML : '')
+                            + procesarFuente(marked.parse(accumulated));
+                        // Re-bind click tras rerender
+                        const tp = target.querySelector('.thinking-panel');
+                        if (tp) tp.onclick = () => tp.classList.toggle('collapsed');
+                        scrollBottom();
+                    }
+                } catch (_) {}
+            }
+        }
+
+        if (accumulated) {
+            conversationHistory.push({ role: 'assistant', content: accumulated });
+            if (conversationHistory.length > 20) conversationHistory.splice(0, 2);
+        }
+
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            target.innerHTML = (accumulated ? procesarFuente(marked.parse(accumulated)) : '') +
+                '<br><em style="color:#94a3b8;font-size:.85em;">[Consulta cancelada]</em>';
+        } else {
+            target.innerHTML = `<div style="color:#b91c1c;">
+                <strong>⚠ Error de conexión</strong><br>
+                Verifique que el servidor proxy esté activo.
+            </div>`;
+            document.getElementById('connection-dot').className    = 'error';
+            document.getElementById('connection-text').textContent = '⚠ Servidor IA desconectado';
+        }
+    } finally {
+        clearInterval(waitInterval);
+            sendBtn.disabled       = false;
+        sendBtn.style.display  = 'block';
+        stopBtn.style.display  = 'none';
+        input.disabled         = false;
+        target.removeAttribute('id');
+        scrollBottom();
+        input.focus();
+        isQuerying = false;
+    }
+}
+
+function stopGeneration() {
+    if (controller) controller.abort();
+}
+
+document.getElementById('userInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        query();
+    }
+});
+
+document.getElementById('userInput').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+checkConnection();
+setInterval(checkConnection, 60000);
+</script>
+</body>
+</html>
