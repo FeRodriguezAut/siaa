@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════════╗
-║         SIAA — Proxy Inteligente  v2.1.22                       ║
+║         SIAA — Proxy Inteligente  v2.1.6                        ║
 ║         Seccional Bucaramanga — Rama Judicial                    ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║  CORRECCIONES v2.1.6 (sobre v2.1.5)                              ║
@@ -162,16 +162,8 @@ def cache_stats() -> dict:
         }
 
 
-# [v2.1.22] IP real del servidor — configurar aquí o via env var SIAA_SERVER_IP
-# Ejemplo: SERVIDOR_IP = "192.168.1.100"
-# Si está vacío, usa la IP del header Host (puede fallar tras Nginx)
-SERVIDOR_IP = os.environ.get("SIAA_SERVER_IP", "")
-# Puerto expuesto al navegador (80 si Nginx proxea, 5000 si acceso directo)
-SERVIDOR_PUERTO = os.environ.get("SIAA_SERVER_PORT", "5000")
-
 app = Flask(__name__)
 CORS(app)
-
 
 # ================================================================
 #  CONFIGURACIÓN CENTRAL
@@ -179,7 +171,7 @@ CORS(app)
 
 OLLAMA_URL             = "http://localhost:11434"
 MODEL                  = "qwen2.5:3b"
-VERSION                = "2.1.25"
+VERSION                = "2.1.19"
 
 # ================================================================
 #  SISTEMA DE MONITOREO DE CALIDAD — Problema F
@@ -291,9 +283,9 @@ MIN_LEN_KEYWORD        = 3
 # CHUNK_OVERLAP: chars compartidos entre chunks consecutivos
 #                evita que un artículo quede partido entre dos chunks
 # MAX_CHUNKS_CONTEXTO: cuántos chunks enviar al modelo por documento
-CHUNK_SIZE             = 800    # [v2.1.24] restaurado: 800c — velocidad < 30s
-CHUNK_OVERLAP = 300   # [v2.1.24] restaurado
-MAX_CHUNKS_CONTEXTO    = 3   # [v2.1.24] 3 × 800 = 2400 chars máx — balance velocidad/contexto
+CHUNK_SIZE             = 800
+CHUNK_OVERLAP = 300   # [v2.1.15]
+MAX_CHUNKS_CONTEXTO    = 3   # [v2.1.8] 3 × 800 = 2400 chars máx por doc
 
 # ================================================================
 #  PATRONES DE DOCUMENTOS ESPECÍFICOS
@@ -323,22 +315,11 @@ Para saludos y preguntas generales sobre ti mismo, responde directamente.
 Recuerda que puedes ayudar con consultas sobre procesos judiciales, administrativos y normativos."""
 
 SYSTEM_DOCUMENTAL = """Eres SIAA, asistente judicial de la Seccional Bucaramanga.
-
-TAREA: Responder usando ÚNICAMENTE el contenido de los bloques [DOC:...] que recibirás.
-
-PROCESO OBLIGATORIO — sigue estos pasos en orden:
-1. Lee cada bloque [DOC:...] completo.
-2. Identifica qué partes del texto se relacionan con la pregunta, aunque sea parcialmente.
-3. Construye la respuesta con esos fragmentos relevantes.
-4. Si encontraste información aunque sea parcial → responde con ella.
-5. Solo si el contexto es completamente ajeno al tema → responde: "No encontré esa información en los documentos disponibles."
-
-REGLAS ADICIONALES:
-- Cita literalmente artículos, campos, fechas, roles y valores numéricos.
-- Si el contexto habla del tema en términos generales, explica eso al usuario.
-- Si la pregunta pregunta por un campo específico de un formulario y el contexto lo lista, nómbralo.
-- Nunca inventes información que no esté en el contexto.
-- Español formal institucional. Sin preámbulos. Máximo 10 líneas."""
+Responde SOLO con información de los bloques [DOC:...]. No inventes nada externo.
+Si el contexto tiene fechas, artículos, roles o sanciones, cítalos literalmente.
+Si un rol preguntado no está en la lista del contexto, di cuáles roles sí existen.
+Si la información no está en el contexto, responde: "No encontré esa información en los documentos disponibles."
+Español formal. Máximo 4 líneas."""
 
 PATRONES_CONVERSACION = [
     "hola", "buenos días", "buenas tardes", "buenas noches", "buen día",
@@ -353,133 +334,12 @@ PATRONES_CONVERSACION = [
 ]
 
 
-# [v2.1.23] Términos que NUNCA son conversación — aunque el texto sea corto
-# "Que es Sierju?" = 14 chars → antes clasificaba como conversacional → alucinaba
-TERMINOS_SIEMPRE_DOCUMENTAL = {
-    # SIERJU y normativa
-    "sierju", "psaa", "pcsja", "acuerdo", "artículo", "articulo",
-    "sanción", "sancion", "disciplin", "reportar", "reporte",
-    "formulario", "plazo", "periodicidad", "diligenciar",
-    "inventario", "estadística", "estadistica", "juzgado",
-    "tribunal", "magistrado", "despacho", "juez", "funcionario",
-    "consecuencia", "incumplimiento", "responsable", "normativa",
-    "circular", "resolución", "resolucion", "decreto",
-    # Campos del formulario SIERJU
-    "inventario", "ingresos", "egresos", "carga laboral", "efectivos",
-    "clase de proceso", "apartado", "módulo", "seccion", "sección",
-    # Área administrativa general — [v2.1.25]
-    "nomina", "nómina", "bienestar", "talento humano", "vacaciones",
-    "licencia", "comision", "comisión", "prima", "cesantias",
-    "seguridad social", "eps", "pensión", "pension", "contrato",
-    "vinculacion", "vinculación", "carrera judicial", "calificación",
-    "evaluación", "evaluacion", "capacitación", "capacitacion",
-    "traslado", "permiso", "prestación", "prestacion",
-}
-
 def es_conversacion_general(texto: str) -> bool:
     t = texto.lower().strip()
-    # [v2.1.23] Si contiene término técnico/judicial → SIEMPRE documental
-    # sin importar la longitud. Ejemplo: "Que es Sierju?" (14 chars) → documental
-    if any(term in t for term in TERMINOS_SIEMPRE_DOCUMENTAL):
-        return False
-    # Umbral reducido de 15 a 8: solo frases ultracortas son saludos
-    if len(t) < 8:
+    if len(t) < 15:
         return True
     return any(p in t for p in PATRONES_CONVERSACION)
 
-
-
-
-# ================================================================
-#  [v2.1.24] CLARIFICADOR — Preguntas ambiguas
-#
-#  Si el usuario pregunta sobre "juzgado civil" sin especificar
-#  municipal o circuito, el sistema pregunta en lugar de buscar
-#  en el documento equivocado y fallar.
-#
-#  Estructura: { patron_en_pregunta: (opciones, pregunta_a_usuario) }
-# ================================================================
-
-CLARIFICACIONES = {
-    # Civil sin especificar
-    ("civil", "juzgado civil"): {
-        "condicion": lambda t: "civil" in t and not any(x in t for x in [
-            "municipal", "circuito", "familia", "tierras", "ejecucion", "ejecución",
-            "pequeñas", "pequenas", "circuito especializado"
-        ]),
-        "opciones": [
-            "Juzgado Civil Municipal",
-            "Juzgado Civil del Circuito",
-            "Juzgado Civil del Circuito Especializado",
-            "Juzgado Civil de Ejecución de Sentencias",
-            "Juzgado de Familia",
-        ],
-        "pregunta": "¿A qué tipo de Juzgado Civil se refiere su consulta?",
-    },
-    # Penal sin especificar
-    ("penal", "juzgado penal"): {
-        "condicion": lambda t: "penal" in t and not any(x in t for x in [
-            "municipal", "circuito", "adolescente", "adolescentes", "especializado",
-            "ejecucion", "ejecución", "conocimiento", "garantias", "garantías"
-        ]),
-        "opciones": [
-            "Juzgado Penal Municipal",
-            "Juzgado Penal del Circuito",
-            "Juzgado Penal del Circuito Especializado",
-            "Juzgado Penal de Adolescentes",
-        ],
-        "pregunta": "¿A qué tipo de Juzgado Penal se refiere su consulta?",
-    },
-    # Laboral sin especificar
-    ("laboral", "juzgado laboral"): {
-        "condicion": lambda t: "laboral" in t and not any(x in t for x in [
-            "pequeñas", "pequenas", "causas", "sala", "tribunal"
-        ]),
-        "opciones": [
-            "Juzgado Laboral del Circuito",
-            "Juzgado de Pequeñas Causas Laborales",
-            "Sala Laboral del Tribunal",
-        ],
-        "pregunta": "¿A qué instancia laboral se refiere su consulta?",
-    },
-    # Promiscuo sin especificar
-    ("promiscuo",): {
-        "condicion": lambda t: "promiscuo" in t and not any(x in t for x in [
-            "municipal", "circuito"
-        ]),
-        "opciones": [
-            "Juzgado Promiscuo Municipal",
-            "Juzgado Promiscuo del Circuito",
-        ],
-        "pregunta": "¿Se refiere al Juzgado Promiscuo Municipal o del Circuito?",
-    },
-    # Administrativo sin especificar
-    ("administrativo",): {
-        "condicion": lambda t: "administrativo" in t and not any(x in t for x in [
-            "tribunal", "juzgado", "sala"
-        ]) and "sierju" not in t and "acuerdo" not in t,
-        "opciones": [
-            "Juzgado Administrativo",
-            "Tribunal Administrativo",
-        ],
-        "pregunta": "¿Se refiere al Juzgado Administrativo o al Tribunal Administrativo?",
-    },
-}
-
-
-def detectar_clarificacion(pregunta: str) -> dict | None:
-    """
-    Detecta si la pregunta es ambigua y necesita clarificación.
-    Retorna dict con {pregunta, opciones} o None si no es ambigua.
-    """
-    t = pregunta.lower()
-    for claves, config in CLARIFICACIONES.items():
-        if config["condicion"](t):
-            return {
-                "pregunta_clarificacion": config["pregunta"],
-                "opciones": config["opciones"],
-            }
-    return None
 
 # ================================================================
 #  MONITOR OLLAMA + WARM-UP
@@ -873,13 +733,7 @@ def detectar_documentos(pregunta: str, max_docs: int = MAX_DOCS_CONTEXTO) -> lis
         ],
         # psaa16: fuente principal de reglas del SIERJU
         # [v2.1.15] Agregar sanciones, roles y responsabilidades
-        # [v2.1.22] Agregar queries de definición "qué es SIERJU" / "de qué trata"
         "acuerdo_no._psaa16-10476.md": [
-            # Definición / objeto del SIERJU
-            "que es sierju", "que es el sierju", "para que sirve", "objeto",
-            "sistema de informacion", "recoleccion de informacion", "estadistica",
-            "de que trata", "trata el acuerdo", "trata el psaa", "proposito",
-            "descripcion", "describe", "explica", "finalidad",
             # Periodicidad y plazos
             "sierju", "periodicidad", "reportar", "quinto dia habil",
             "formulario", "recoleccion", "discrepancia",
@@ -897,8 +751,6 @@ def detectar_documentos(pregunta: str, max_docs: int = MAX_DOCS_CONTEXTO) -> lis
         ],
         # acuerdo_no__psaa16-10476.md es el mismo con guiones
         "acuerdo_no__psaa16-10476.md": [
-            "que es sierju", "que es el sierju", "para que sirve", "objeto",
-            "de que trata", "trata el acuerdo", "proposito", "finalidad",
             "sierju", "periodicidad", "reportar", "quinto dia habil",
             "formulario", "recoleccion", "discrepancia",
             "roles", "rol", "funcionario", "juez", "magistrado",
@@ -1136,22 +988,6 @@ def extraer_fragmento(nombre_doc: str, pregunta: str) -> str:
     # [FIX v2.1.11] Query expansion — agregar keywords temáticas según el tipo de pregunta
     # El usuario dice "cuándo" pero el documento dice "periodicidad", "plazo", "hábil"
     p_lower = pregunta.lower()
-    # [v2.1.22] Preguntas de DEFINICIÓN — "qué es X", "de qué trata", "para qué sirve"
-    # El sistema antes NO expandía estas queries → seleccionaba chunks irrelevantes
-    es_pregunta_definicion = any(w in p_lower for w in [
-        "qué es", "que es", "qué significa", "que significa",
-        "de qué trata", "de que trata", "qué describe", "que describe",
-        "para qué sirve", "para que sirve", "qué es el", "que es el",
-        "qué es la", "que es la", "qué es un", "que es un",
-        "explica", "explícame", "explicame", "describe", "definición", "definicion",
-    ])
-    if es_pregunta_definicion:
-        palabras.update(["sistema", "herramienta", "plataforma", "estadístico",
-                         "estadistico", "información", "informacion", "instrumento",
-                         "judicial", "recolección", "recoleccion", "registro",
-                         "datos", "inventario", "reportar", "objeto", "consiste",
-                         "tiene", "permite", "mediante", "propósito", "proposito"])
-
     if any(w in p_lower for w in ["cuándo", "cuando", "plazo", "fecha", "término", "termino"]):
         palabras.update(["periodicidad", "plazo", "hábil", "habiles", "trimestre",
                          "vencimiento", "quinto", "corte", "periodo", "período"])
@@ -1187,16 +1023,6 @@ def extraer_fragmento(nombre_doc: str, pregunta: str) -> str:
     if any(w in p_lower for w in ["cómo", "como", "pasos", "procedimiento", "diligenciar"]):
         palabras.update(["procedimiento", "pasos", "diligenciar", "registrar",
                          "formulario", "módulo"])
-    # [v2.1.25] Preguntas sobre campos de formulario SIERJU
-    if any(w in p_lower for w in ["apartado", "campo", "sección", "seccion", "columna",
-                                   "clase", "proceso", "tipo proceso", "ingresos",
-                                   "egresos", "inventario", "carga", "efectivos",
-                                   "que informacion", "qué información", "que se ingresa",
-                                   "qué se ingresa", "qué dato", "que dato"]):
-        palabras.update(["campo", "apartado", "sección", "columna", "formulario",
-                         "diligenciar", "registrar", "ingresar", "dato", "información",
-                         "clase", "proceso", "tipo", "inventario", "ingreso", "egreso",
-                         "efectivo", "módulo", "penal", "civil", "laboral"])
     if any(w in p_lower for w in ["discrepancia", "diferencia", "error", "inconsistencia"]):
         palabras.update(["discrepancia", "inconsistencia", "corrección", "unidad",
                          "verificación", "hábiles"])
@@ -1221,49 +1047,14 @@ def extraer_fragmento(nombre_doc: str, pregunta: str) -> str:
             if chunks_con_w / total_chunks <= 0.85:
                 idf_local[w] = idf_val
 
-    # ── [v2.1.25] BÚSQUEDA POR FRASES EXACTAS ─────────────────────────
-    # Detecta frases de 2-5 palabras de la pregunta y les da bonus masivo.
-    # Resuelve: "clase de proceso" → chunk con "Clase de proceso:" score +50
-    # Sin esto, "clase" y "proceso" sueltos pueden aparecer en muchos chunks
-    # y el chunk correcto queda enterrado.
-    frases_exactas = []
-    palabras_lista = [w for w in sorted(palabras, key=len, reverse=True) if len(w) > 3]
-    # Extraer frases de 2-4 palabras consecutivas de la pregunta original
-    pregunta_tokens = pregunta_norm.lower().split()
-    for n in range(4, 1, -1):  # 4-gramas primero, luego 3, luego 2
-        for i in range(len(pregunta_tokens) - n + 1):
-            frase = " ".join(pregunta_tokens[i:i+n])
-            if len(frase) > 6:  # ignorar frases muy cortas
-                frases_exactas.append(frase)
-
     # Puntuar todos los chunks con IDF local
     scored = []
     for chunk in chunks:
         pts = puntuar_chunk(chunk, palabras, pregunta_norm, terminos_prio, idf_local)
-        texto_lower = chunk["texto"].lower()
-        # Bonus masivo por frases exactas — prioriza chunk que contiene la frase completa
-        for frase in frases_exactas:
-            if frase in texto_lower:
-                longitud_bonus = len(frase.split()) * 12.0  # 2 palabras=24, 3=36, 4=48
-                pts += longitud_bonus
-                break  # solo contar la frase más larga que coincida
         if pts > 0:
             scored.append((pts, chunk["indice"], chunk))
 
     scored.sort(reverse=True)
-
-    # [v2.1.22] POSITION BIAS para preguntas de definición
-    # Los acuerdos estructuran así: CONSIDERANDOS → ARTÍCULO 1 (objeto) → ARTÍCULO 2...
-    # Una pregunta "¿Qué es el SIERJU?" debe priorizar el inicio del doc, no el artículo 18.
-    if es_pregunta_definicion and scored:
-        scored_bias = []
-        for pts, idx, chunk in scored:
-            # Chunks 0-4: bonus decreciente (inicio del doc = definiciones)
-            position_bonus = max(0.0, (5 - idx) * 3.0)
-            scored_bias.append((pts + position_bonus, idx, chunk))
-        scored_bias.sort(reverse=True)
-        scored = scored_bias
-        print(f"  [DEF-BIAS] Aplicado bias posicional para pregunta de definición", flush=True)
 
     # [v2.1.16] PODA DINÁMICA — "Francotirador vs Escopeta"
     # [v2.1.17] EXCEPCIÓN: preguntas de LISTADO nunca usan Francotirador.
@@ -1273,19 +1064,12 @@ def extraer_fragmento(nombre_doc: str, pregunta: str) -> str:
     # en el chunk 2, que Francotirador descarta).
     es_listado = es_pregunta_listado(pregunta)
     
-    # [v2.1.25] Para documentos muy grandes (>80 chunks), aumentar a 4 chunks
-    # Un doc con 262 chunks tiene aprox 200KB — 3×800=2400 chars es solo el 1.2%
-    max_chunks_efectivo = MAX_CHUNKS_CONTEXTO
-    if len(chunks) > 80:
-        max_chunks_efectivo = 4   # +1 chunk extra para docs grandes
-        print(f"  [v2.1.25] Doc grande ({len(chunks)} chunks) → max_chunks={max_chunks_efectivo}", flush=True)
-
     if len(scored) >= 2:
         s1, s2 = scored[0][0], scored[1][0]
         ratio  = s1 / max(s2, 0.01)
         if es_listado:
             # Listado: mínimo 2 chunks siempre para capturar todos los ítems
-            chunks_a_usar = max_chunks_efectivo if ratio < 1.8 else 2
+            chunks_a_usar = MAX_CHUNKS_CONTEXTO if ratio < 1.8 else 2
             modo = "LISTADO-BINÓCULO" if chunks_a_usar == 2 else "LISTADO-ESCOPETA"
         elif ratio >= 3.0:
             chunks_a_usar = 1   # Certeza alta  → 1 chunk  ≈200 tok
@@ -1294,7 +1078,7 @@ def extraer_fragmento(nombre_doc: str, pregunta: str) -> str:
             chunks_a_usar = 2   # Certeza media → 2 chunks ≈400 tok
             modo = "BINÓCULO"
         else:
-            chunks_a_usar = max_chunks_efectivo   # Ambiguo → 3 chunks
+            chunks_a_usar = MAX_CHUNKS_CONTEXTO   # Ambiguo → 3 chunks
             modo = "ESCOPETA"
         print(f"  [PODA] {nombre_doc[:25]} ratio={ratio:.2f} → {chunks_a_usar}chunk [{modo}]", flush=True)
     else:
@@ -1343,7 +1127,7 @@ def extraer_fragmento(nombre_doc: str, pregunta: str) -> str:
 #  CLIENTE OLLAMA
 # ================================================================
 
-def llamar_ollama(mensajes: list, num_predict: int = 150, num_ctx: int = 2048) -> list:
+def llamar_ollama(mensajes: list, num_predict: int = 150) -> list:
     adquirido = ollama_semaforo.acquire(timeout=30)
     if not adquirido:
         return ["COLA_LLENA"]
@@ -1357,9 +1141,9 @@ def llamar_ollama(mensajes: list, num_predict: int = 150, num_ctx: int = 2048) -
                 "stream":   True,
                 "think":    False,
                 "options":  {
-                    "temperature":    0.0,
-                    "num_predict":    num_predict,
-                    "num_ctx":        num_ctx,   # [v2.1.23] dinámico: 2048 simple / 3072 compleja
+                    "temperature":    0.0,    # [v2.1.9] 0=determinístico, sin generación desde memoria
+                    "num_predict":    num_predict,         # [v2.1.17] dinámico: 150 normal, 300 listados
+                    "num_ctx":        2048,   # [v2.1.8] alineado: 2×3×800≈1200tok + overhead=1780tok < 2048
                     "num_thread":     6,      # [v2.1.8] Ryzen 5 2600: 6 núcleos físicos (SMT causa thrashing)
                     "num_batch":      512,    # [v2.1.8] batch más grande → menos ciclos de prefill → TTFT menor
                     "repeat_penalty": 1.1,
@@ -1452,37 +1236,6 @@ def chat():
         contexto        = ""
         docs_relevantes = []
 
-        # ── [v2.1.24] CLARIFICACIÓN — responder antes de buscar si es ambigua ──
-        # Si la pregunta menciona "civil" sin especificar tipo de juzgado,
-        # el sistema pregunta en lugar de buscar en el doc equivocado.
-        if not es_conv:
-            clarif = detectar_clarificacion(ultima_pregunta)
-            if clarif:
-                pregunta_c = clarif["pregunta_clarificacion"]
-                opciones_c = clarif["opciones"]
-                # Construir respuesta como lista de opciones clickeables
-                # El HTML las mostrará como botones de sugerencia
-                opts_txt = "\n".join(f"• {o}" for o in opciones_c)
-                resp_clarif = (
-                    f"{pregunta_c}\n\n{opts_txt}\n\n"
-                    f"_Indique el tipo específico para obtener información precisa._"
-                )
-                safe_r = json.dumps(resp_clarif)[1:-1]
-                dec_activos()
-                registrar_consulta(
-                    tipo="CONV", pregunta=ultima_pregunta,
-                    respuesta=resp_clarif, docs=[],
-                    ctx_chars=0, tiempo_seg=0.0
-                )
-                def _stream_clarif():
-                    yield f'data: {{"choices":[{{"delta":{{"content":"{safe_r}"}}}}]}}\n\n'
-                    yield "data: [DONE]\n\n"
-                return Response(
-                    stream_with_context(_stream_clarif()),
-                    content_type="text/event-stream",
-                    headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
-                )
-
         # ── CACHÉ: consultar antes de procesar ────────────────────────────────
         # Solo para preguntas documentales — las conversacionales son únicas
         if not es_conv and CACHE_SOLO_DOC:
@@ -1535,9 +1288,7 @@ def chat():
         if not es_conv and docs_relevantes:
             partes_cita = []
             links_ver   = []
-            # [v2.1.22] Usar SERVIDOR_IP configurable; fallback a request.host
-            host_ip = SERVIDOR_IP if SERVIDOR_IP else request.host.split(":")[0]
-            puerto  = SERVIDOR_PUERTO
+            host_ip     = request.host.split(":")[0]   # IP del servidor
             with documentos_lock:
                 for nd in docs_relevantes:
                     doc_info = documentos_cargados.get(nd, {})
@@ -1549,7 +1300,7 @@ def chat():
                             else f"{nombre_d} ({colec.upper()})"
                     partes_cita.append(etiq)
                     # Link A: abre el doc completo en nueva pestaña
-                    url = f"http://{host_ip}:{puerto}/siaa/ver/{nd}"
+                    url = f"http://{host_ip}:5000/siaa/ver/{nd}"
                     links_ver.append(f"[📖 Ver {nombre_d}]({url})")
 
             cita_fuente = "\n\n📄 **Fuente:** " + " · ".join(partes_cita)
@@ -1606,28 +1357,18 @@ def chat():
                 ollama_msgs.append(msg)
 
         # [v2.1.17] num_predict dinámico — listados necesitan más tokens
+        # Lista de 7 secciones con nombres largos ≈ 200 tokens.
+        # Respuesta puntual (fecha, artículo) ≈ 60-80 tokens.
         _es_listado = not es_conv and es_pregunta_listado(ultima_pregunta)
         _num_predict = 300 if _es_listado else 150
         if _es_listado:
             print(f"  [LISTADO] num_predict=300 para: {ultima_pregunta[:50]!r}", flush=True)
 
-        # [v2.1.23] num_ctx dinámico — evita timeout en preguntas complejas
-        # Calcular tokens aproximados del contexto (1 token ≈ 4 chars)
-        _ctx_chars   = len(contexto) + sum(len(m.get("content","")) for m in ollama_msgs)
-        _ctx_tokens  = _ctx_chars // 4
-        if _ctx_tokens < 400:
-            _num_ctx = 1024   # Pregunta simple o caché — rápido
-        elif _ctx_tokens < 900:
-            _num_ctx = 2048   # Contexto normal
-        else:
-            _num_ctx = 3072   # Contexto grande — sin llegar a 4096 que causa timeout
-        print(f"  [CTX] chars={_ctx_chars} tok≈{_ctx_tokens} → num_ctx={_num_ctx}", flush=True)
-
         t_inicio = time.time()   # [v2.1.13] Para medir tiempo de respuesta
 
         def generate():
             try:
-                result = llamar_ollama(ollama_msgs, num_predict=_num_predict, num_ctx=_num_ctx)
+                result = llamar_ollama(ollama_msgs, num_predict=_num_predict)
                 respuesta_completa = ""   # [v2.1.12] Acumular para caché
                 if not result:
                     yield 'data: {"choices":[{"delta":{"content":"Sin respuesta."}}]}\n\n'

@@ -106,6 +106,23 @@
             color: #475569 !important;
             font-style: italic !important;
         }
+        /* Timestamp al pie de cada burbuja */
+        .msg-meta {
+            display: flex; align-items: center; gap: 7px;
+            margin-top: 8px; padding-top: 6px;
+            border-top: 1px solid rgba(0,0,0,0.07);
+            font-size: 0.71rem; color: #94a3b8; user-select: none;
+        }
+        .msg.user .msg-meta {
+            justify-content: flex-end;
+            border-top-color: rgba(255,255,255,0.18);
+            color: rgba(255,255,255,0.62);
+        }
+        .msg-meta .meta-hora   { font-weight: 600; }
+        .msg-meta .meta-sep    { opacity: .4; }
+        .msg-meta .meta-tiempo { display: flex; align-items: center; gap: 3px; }
+        .meta-tiempo svg       { opacity: .7; }
+
         .typing-dots span {
             display: inline-block; width: 7px; height: 7px;
             background: var(--judicial-gold); border-radius: 50%; margin: 0 2px;
@@ -228,6 +245,47 @@
         #sendBtn:hover    { background: #243580; transform: scale(1.02); }
         #sendBtn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
         #stopBtn { background: #b91c1c; display: none; }
+
+        /* ── MODAL VISOR DE DOCUMENTO (C+D) ──────────────────── */
+        #doc-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(10,20,60,0.6); z-index: 99000;
+        }
+        #doc-overlay.open { display: flex; align-items: stretch; justify-content: flex-end; }
+        #doc-panel {
+            width: min(840px, 93vw); height: 100vh;
+            background: white; display: flex; flex-direction: column;
+            box-shadow: -6px 0 40px rgba(0,0,0,0.35);
+            transform: translateX(100%);
+            transition: transform .28s cubic-bezier(.4,0,.2,1);
+        }
+        #doc-overlay.open #doc-panel { transform: translateX(0); }
+        #doc-panel-header {
+            background: var(--judicial-blue); color: white; flex-shrink: 0;
+            padding: 11px 20px; border-bottom: 3px solid var(--judicial-gold);
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        }
+        #doc-panel-titulo { margin: 0; font-size: .85rem; letter-spacing: 1px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #doc-panel-cerrar {
+            background: none; border: 2px solid rgba(255,255,255,.35);
+            color: white; width: 30px; height: 30px; border-radius: 6px;
+            cursor: pointer; font-size: 1rem; font-weight: 700; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            transition: background .15s;
+        }
+        #doc-panel-cerrar:hover { background: rgba(255,255,255,.15); }
+        #doc-panel-iframe { flex: 1; border: none; width: 100%; }
+
+        /* Botón Ver doc dentro de las burbujas */
+        .btn-ver-doc {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: var(--judicial-blue); color: white;
+            border: none; padding: 5px 13px; border-radius: 6px;
+            cursor: pointer; font-size: .78rem; font-weight: 700;
+            letter-spacing: .3px; margin: 3px 4px 2px 0;
+            transition: background .2s, transform .1s;
+        }
+        .btn-ver-doc:hover { background: #243580; transform: scale(1.02); }
         #stopBtn:hover { background: #991818; }
     </style>
 </head>
@@ -239,7 +297,7 @@
         <div class="texto-header" style="text-align:right;">
             <h2>SIAA</h2>
             <span>SECCIONAL BUCARAMANGA</span>
-            <div class="version-badge">v2.1.13</div>
+            <div class="version-badge">v2.1.20</div>
         </div>
         <img src="img/Escudo-rama.png" class="escudo-rama" alt="Rama Judicial" onerror="this.style.display='none'">
     </div>
@@ -278,6 +336,23 @@
 <script>
 const SERVER_HOST = window.location.hostname || '172.16.60.56';
 const PROXY_URL   = `http://${SERVER_HOST}:5000`;
+
+// Configurar marked: links 📖 /siaa/ver/ → abren el modal lateral
+const renderer = new marked.Renderer();
+renderer.link = (href, title, text) => {
+    if (href && href.includes('/siaa/ver/')) {
+        // Extraer nombre legible del doc desde la URL
+        const partes  = href.split('/siaa/ver/');
+        const nombre  = decodeURIComponent(partes[1] || '')
+                        .replace(/_/g,' ').replace(/\.md$/i,'').toUpperCase();
+        // Botón que abre el panel modal
+        return `<button class="btn-ver-doc" onclick="abrirDoc('${href}','${nombre}')">📖 Ver ${nombre}</button>`;
+    }
+    // Cualquier otro link: nueva pestaña
+    const t = title ? ` title="${title}"` : '';
+    return `<a href="${href}"${t} target="_blank" rel="noopener">${text}</a>`;
+};
+marked.setOptions({ renderer });
 
 const conversationHistory = [];
 let controller   = null;
@@ -328,7 +403,14 @@ function renderUser(text) {
     row.className = 'message-row user-row';
     const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;')
                         .replace(/>/g,'&gt;').replace(/\n/g,'<br>');
-    row.innerHTML = `<div class="msg user">${escaped}</div>`;
+    const ahoraUser = new Date();
+    const horaUser  = ahoraUser.toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit'});
+    row.innerHTML = `<div class="msg user">
+        ${escaped}
+        <div class="msg-meta">
+            <span class="meta-hora">${horaUser}</span>
+        </div>
+    </div>`;
     chatBox.appendChild(row);
     scrollBottom();
 }
@@ -376,6 +458,7 @@ async function query() {
     const bubble = document.createElement('div');
     bubble.className = 'msg bot';
     bubble.id        = 'streaming-bubble';
+    const t_inicio   = Date.now();   // para calcular tiempo de respuesta
 
     // Estado inicial: puntos animados + etiqueta de estado
     bubble.innerHTML = `<div class="bot-loading">
@@ -527,7 +610,30 @@ async function query() {
         }
     } finally {
         clearInterval(waitInterval);
-            sendBtn.disabled       = false;
+
+        // ── Timestamp y tiempo de respuesta ──────────────────────
+        const ahoraBot  = new Date();
+        const horaBot   = ahoraBot.toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit'});
+        const seg       = ((Date.now() - t_inicio) / 1000).toFixed(1);
+        const metaHTML  = `
+            <div class="msg-meta">
+                <span class="meta-hora">${horaBot}</span>
+                <span class="meta-sep">·</span>
+                <span class="meta-tiempo">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2.5">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    ${seg}s
+                </span>
+            </div>`;
+        // Insertar meta al final del contenido de la burbuja
+        if (target) {
+            target.insertAdjacentHTML('beforeend', metaHTML);
+        }
+
+        sendBtn.disabled       = false;
         sendBtn.style.display  = 'block';
         stopBtn.style.display  = 'none';
         input.disabled         = false;
@@ -541,6 +647,33 @@ async function query() {
 function stopGeneration() {
     if (controller) controller.abort();
 }
+
+// ── Visor de documentos (C+D) ─────────────────────────────────
+function abrirDoc(url, nombre) {
+    document.getElementById('doc-panel-titulo').textContent = '📄 ' + nombre;
+    document.getElementById('doc-panel-iframe').src = url;
+    document.getElementById('doc-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';  // evitar scroll doble
+}
+
+function cerrarDoc() {
+    document.getElementById('doc-overlay').classList.remove('open');
+    // Esperar a que termine la animación antes de limpiar el iframe
+    setTimeout(() => {
+        document.getElementById('doc-panel-iframe').src = 'about:blank';
+    }, 300);
+    document.body.style.overflow = '';
+}
+
+function overlayClick(e) {
+    // Solo cerrar si el clic fue en el overlay oscuro, no en el panel
+    if (e.target === document.getElementById('doc-overlay')) cerrarDoc();
+}
+
+// Cerrar con Escape
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') cerrarDoc();
+});
 
 document.getElementById('userInput').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -557,5 +690,15 @@ document.getElementById('userInput').addEventListener('input', function() {
 checkConnection();
 setInterval(checkConnection, 60000);
 </script>
+<!-- ═══ PANEL LATERAL VISOR DE DOCUMENTO ═══ -->
+<div id="doc-overlay" onclick="overlayClick(event)">
+    <div id="doc-panel">
+        <div id="doc-panel-header">
+            <h3 id="doc-panel-titulo">📄 Documento</h3>
+            <button id="doc-panel-cerrar" onclick="cerrarDoc()" title="Cerrar (Esc)">✕</button>
+        </div>
+        <iframe id="doc-panel-iframe" src="about:blank" title="Documento completo"></iframe>
+    </div>
+</div>
 </body>
 </html>

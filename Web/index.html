@@ -276,6 +276,94 @@
         #doc-panel-cerrar:hover { background: rgba(255,255,255,.15); }
         #doc-panel-iframe { flex: 1; border: none; width: 100%; }
 
+        /* ── FAQ Drawer [v2.1.25] ── */
+        .faq-tab {
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: #64748b;
+            padding: 8px 16px;
+            font-size: .8rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.18s;
+            flex-shrink: 0;
+        }
+        .faq-tab:hover { color: var(--judicial-blue); background: rgba(26,42,108,0.05); }
+        .faq-tab.active {
+            color: var(--judicial-blue);
+            border-bottom: 3px solid var(--judicial-gold);
+            background: white;
+        }
+        .faq-seccion-titulo {
+            font-size: .72rem;
+            font-weight: 700;
+            color: var(--judicial-gold);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            padding: 6px 0 3px 0;
+            border-bottom: 1px solid #f1f5f9;
+            margin-bottom: 3px;
+        }
+        .faq-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: none;
+            border: none;
+            border-left: 3px solid transparent;
+            color: #334155;
+            padding: 6px 8px;
+            font-size: .83rem;
+            cursor: pointer;
+            border-radius: 0 6px 6px 0;
+            transition: all 0.15s;
+            line-height: 1.4;
+        }
+        .faq-item:hover {
+            background: var(--judicial-light);
+            border-left: 3px solid var(--judicial-blue);
+            color: var(--judicial-blue);
+            font-weight: 600;
+        }
+        /* scrollbar del drawer */
+        #faq-body::-webkit-scrollbar { width: 5px; }
+        #faq-body::-webkit-scrollbar-track { background: #f8faff; }
+        #faq-body::-webkit-scrollbar-thumb { background: #c8d3e8; border-radius: 4px; }
+
+        /* Botón Ver doc dentro de las burbujas */
+        .faq-tab {
+            background: rgba(26,42,108,0.08);
+            border: 1.5px solid rgba(26,42,108,0.18);
+            color: var(--judicial-blue);
+            border-radius: 20px;
+            padding: 5px 14px;
+            font-size: .8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .faq-tab:hover { background: var(--judicial-blue); color: white; }
+        .faq-tab.active { background: var(--judicial-blue); color: white; border-color: var(--judicial-blue); }
+        .faq-btn {
+            background: white;
+            border: 1.5px solid #c8d3e8;
+            color: var(--judicial-blue);
+            border-radius: 16px;
+            padding: 5px 12px;
+            font-size: .78rem;
+            cursor: pointer;
+            transition: all 0.18s;
+            white-space: nowrap;
+        }
+        .faq-btn:hover {
+            background: var(--judicial-blue);
+            color: white;
+            border-color: var(--judicial-blue);
+            transform: translateY(-1px);
+        }
+
         /* Botón Ver doc dentro de las burbujas */
         .btn-ver-doc {
             display: inline-flex; align-items: center; gap: 5px;
@@ -297,7 +385,7 @@
         <div class="texto-header" style="text-align:right;">
             <h2>SIAA</h2>
             <span>SECCIONAL BUCARAMANGA</span>
-            <div class="version-badge">v2.1.20</div>
+            <div class="version-badge">v2.1.25</div>
         </div>
         <img src="img/Escudo-rama.png" class="escudo-rama" alt="Rama Judicial" onerror="this.style.display='none'">
     </div>
@@ -311,16 +399,130 @@
 <div id="chat-box">
     <div class="message-row bot-row">
         <img src="img/logo_recortado.png" class="bot-avatar" alt="SIAA" onerror="this.style.display='none'">
-        <div class="msg bot">
-            <strong>¡Bienvenido al SIAA!</strong><br>
-            El Sistema Inteligente de Apoyo Administrativo está listo para atenderle.
-            Puede consultar normativa, procesos administrativos y documentación institucional
-            de la Seccional Bucaramanga.<br><br>
-            <em style="color:#64748b; font-size:.88em;">Escriba su consulta y presione CONSULTAR o Enter.</em>
+        <div class="msg bot" style="width:100%; max-width:820px;">
+
+            <!-- Saludo institucional -->
+            <div style="margin-bottom:12px;">
+                <div style="font-size:1.05rem; font-weight:700; color:var(--judicial-blue); margin-bottom:4px;">
+                    ¡Bienvenido al SIAA!
+                </div>
+                <div style="font-size:.9rem; color:#334155; line-height:1.6;">
+                    Soy el <strong>Sistema Inteligente de Apoyo Administrativo</strong> de la Seccional Bucaramanga,
+                    Rama Judicial de Colombia.<br>
+                    Estoy aquí para ayudarle con consultas sobre el <strong>SIERJU</strong>,
+                    normativa judicial, procesos administrativos y el diligenciamiento de formularios
+                    estadísticos de los despachos judiciales de la seccional.
+                </div>
+                <div style="margin-top:8px; font-size:.8rem; color:#94a3b8;">
+                    ✏️ Escriba su consulta abajo o explore las preguntas frecuentes
+                </div>
+            </div>
+
+            <!-- Botón de preguntas frecuentes -->
+            <div>
+                <button id="faq-toggle-btn" onclick="toggleFAQ()"
+                    style="display:flex; align-items:center; gap:8px; background:var(--judicial-blue);
+                    color:white; border:none; border-radius:8px; padding:8px 16px;
+                    font-size:.85rem; font-weight:600; cursor:pointer; transition:all 0.2s;">
+                    <span id="faq-arrow">▶</span>
+                    <span>📋 Preguntas Frecuentes</span>
+                    <span style="background:rgba(255,255,255,0.2); border-radius:10px;
+                        padding:1px 8px; font-size:.75rem; margin-left:4px;">Ver todas</span>
+                </button>
+
+                <!-- Panel FAQ colapsable -->
+                <div id="faq-drawer" style="display:none; margin-top:10px; border:1.5px solid #dce3f0;
+                    border-radius:10px; overflow:hidden; box-shadow:0 4px 16px rgba(26,42,108,0.08);">
+
+                    <!-- Pestañas -->
+                    <div style="display:flex; background:#f8faff; border-bottom:1px solid #dce3f0; overflow-x:auto;">
+                        <button class="faq-tab active" onclick="cambiarTab('sierju', this)">📊 SIERJU</button>
+                        <button class="faq-tab" onclick="cambiarTab('normativa', this)">📜 Normativa</button>
+                        <button class="faq-tab" onclick="cambiarTab('juzgados', this)">⚖️ Juzgados</button>
+                        <button class="faq-tab" onclick="cambiarTab('administrativo', this)">🏛️ Administrativo</button>
+                    </div>
+
+                    <!-- Contenido scrollable -->
+                    <div id="faq-body" style="max-height:260px; overflow-y:auto; padding:12px 14px;
+                        background:white; display:flex; flex-direction:column; gap:4px;">
+
+                        <!-- SIERJU -->
+                        <div id="faq-sierju" class="faq-section">
+                            <div class="faq-seccion-titulo">📊 SIERJU — General</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué es el SIERJU?')">¿Qué es el SIERJU?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Para qué sirve el SIERJU?')">¿Para qué sirve el SIERJU?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cuándo debo reportar en el SIERJU?')">¿Cuándo debo reportar en el SIERJU?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué pasa si no reporto a tiempo?')">¿Qué pasa si no reporto a tiempo?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cuáles son las consecuencias de no reportar la estadística?')">¿Cuáles son las consecuencias de no reportar?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Quién es responsable de diligenciar el SIERJU?')">¿Quién es responsable de diligenciar el SIERJU?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cuáles son los roles en el SIERJU?')">¿Cuáles son los roles en el SIERJU?</button>
+                            <div class="faq-seccion-titulo" style="margin-top:8px;">📊 SIERJU — Campos del formulario</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué es inventario final en el SIERJU?')">¿Qué es inventario final?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué es inventario inicial en el SIERJU?')">¿Qué es inventario inicial?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué son ingresos efectivos en el SIERJU?')">¿Qué son ingresos efectivos?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué son egresos en el SIERJU?')">¿Qué son egresos?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué es carga laboral en el SIERJU?')">¿Qué es carga laboral?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo corrijo un error en el SIERJU?')">¿Cómo corrijo un error en el SIERJU?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué hacer si hay problema técnico con el SIERJU?')">¿Qué hacer si hay problema técnico?</button>
+                        </div>
+
+                        <!-- Normativa -->
+                        <div id="faq-normativa" class="faq-section" style="display:none;">
+                            <div class="faq-seccion-titulo">📜 Normativa — Acuerdos</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿De qué trata el Acuerdo PSAA16-10476?')">¿De qué trata el Acuerdo PSAA16-10476?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿De qué trata el Acuerdo PCSJA19-11207?')">¿De qué trata el Acuerdo PCSJA19-11207?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿De qué trata el Acuerdo PCSJA25-12324?')">¿De qué trata el Acuerdo PCSJA25-12324?</button>
+                            <div class="faq-seccion-titulo" style="margin-top:8px;">📜 Normativa — Sanciones y deberes</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cuáles son las sanciones por incumplimiento del SIERJU?')">¿Cuáles son las sanciones por incumplimiento?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué deberes tiene el funcionario judicial en el SIERJU?')">¿Qué deberes tiene el funcionario?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué deberes tiene el Administrador Seccional?')">¿Qué deberes tiene el Administrador Seccional?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué responsabilidades tienen las Salas Administrativas?')">¿Qué responsabilidades tienen las Salas Administrativas?</button>
+                        </div>
+
+                        <!-- Juzgados -->
+                        <div id="faq-juzgados" class="faq-section" style="display:none;">
+                            <div class="faq-seccion-titulo">⚖️ Juzgados Civiles</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Civil Municipal?')">Juzgado Civil Municipal</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Civil del Circuito?')">Juzgado Civil del Circuito</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Civil de Ejecución de Sentencias?')">Civil Ejecución de Sentencias</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado de Familia?')">Juzgado de Familia</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Civil de Tierras del Circuito?')">Civil Tierras del Circuito</button>
+                            <div class="faq-seccion-titulo" style="margin-top:8px;">⚖️ Juzgados Penales</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Penal Municipal?')">Juzgado Penal Municipal</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Penal del Circuito?')">Juzgado Penal del Circuito</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Penal Circuito Especializado?')">Penal Circuito Especializado</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Penal de Adolescentes?')">Juzgado Penal Adolescentes</button>
+                            <div class="faq-seccion-titulo" style="margin-top:8px;">⚖️ Juzgados Laborales y otros</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Laboral del Circuito?')">Juzgado Laboral del Circuito</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado de Pequeñas Causas Laborales?')">Pequeñas Causas Laborales</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Promiscuo Municipal?')">Juzgado Promiscuo Municipal</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Promiscuo del Circuito?')">Juzgado Promiscuo del Circuito</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Administrativo?')">Juzgado Administrativo</button>
+                            <div class="faq-seccion-titulo" style="margin-top:8px;">⚖️ Tribunales y Salas</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Tribunal Administrativo?')">Tribunal Administrativo</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Sala Penal del Tribunal Superior?')">Sala Penal Tribunal Superior</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Sala Civil y de Familia del Tribunal?')">Sala Civil y Familia Tribunal</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Sala Laboral del Tribunal?')">Sala Laboral del Tribunal</button>
+                        </div>
+
+                        <!-- Administrativo -->
+                        <div id="faq-administrativo" class="faq-section" style="display:none;">
+                            <div class="faq-seccion-titulo">🏛️ Soporte y Administración</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Quién capacita en el uso del SIERJU?')">¿Quién capacita en el SIERJU?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué hace el Administrador Seccional en el SIERJU?')">¿Qué hace el Administrador Seccional?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué es la UDAE?')">¿Qué es la UDAE?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo reportar un problema técnico con el SIERJU?')">¿Cómo reportar un problema técnico?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿La información del SIERJU es pública?')">¿La información del SIERJU es pública?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Con qué frecuencia se actualiza el SIERJU?')">¿Con qué frecuencia se actualiza?</button>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
-
 <div id="bottom-container">
     <!-- loading moved inside chat bubble -->
     <div class="input-group">
@@ -334,25 +536,29 @@
 </div>
 
 <script>
-const SERVER_HOST = window.location.hostname || '172.16.60.56';
+const SERVER_HOST = window.location.hostname || '172.16.62.103';
 const PROXY_URL   = `http://${SERVER_HOST}:5000`;
 
-// Configurar marked: links 📖 /siaa/ver/ → abren el modal lateral
+// [v2.1.25] Configurar marked — compatible con marked v4 y v5+
+// En v5+ renderer.link recibe un token {href,title,text}; en v4 recibe args separados
 const renderer = new marked.Renderer();
-renderer.link = (href, title, text) => {
+renderer.link = function(hrefOrToken, title, text) {
+    let href, linkTitle, linkText;
+    if (hrefOrToken && typeof hrefOrToken === 'object') {
+        href = hrefOrToken.href || ''; linkTitle = hrefOrToken.title || ''; linkText = hrefOrToken.text || '';
+    } else {
+        href = hrefOrToken || ''; linkTitle = title || ''; linkText = text || '';
+    }
     if (href && href.includes('/siaa/ver/')) {
-        // Extraer nombre legible del doc desde la URL
-        const partes  = href.split('/siaa/ver/');
-        const nombre  = decodeURIComponent(partes[1] || '')
-                        .replace(/_/g,' ').replace(/\.md$/i,'').toUpperCase();
-        // Botón que abre el panel modal
+        const partes = href.split('/siaa/ver/');
+        const nombre = decodeURIComponent(partes[1] || '').replace(/_/g,' ').replace(/\.md$/i,'').toUpperCase();
         return `<button class="btn-ver-doc" onclick="abrirDoc('${href}','${nombre}')">📖 Ver ${nombre}</button>`;
     }
-    // Cualquier otro link: nueva pestaña
-    const t = title ? ` title="${title}"` : '';
-    return `<a href="${href}"${t} target="_blank" rel="noopener">${text}</a>`;
+    const t = linkTitle ? ` title="${linkTitle}"` : '';
+    return `<a href="${href}"${t} target="_blank" rel="noopener">${linkText}</a>`;
 };
-marked.setOptions({ renderer });
+// marked.use() es la API moderna (v5+); setOptions legado (v4)
+try { marked.use({ renderer }); } catch(e) { marked.setOptions({ renderer }); }
 
 const conversationHistory = [];
 let controller   = null;
