@@ -1,0 +1,79 @@
+---
+title: "Bienvenido a SIAA"
+description: "Sistema Inteligente de Apoyo Administrativo — Rama Judicial, Seccional Bucaramanga"
+---
+
+# Bienvenido a SIAA
+
+**SIAA** (Sistema Inteligente de Apoyo Administrativo) es el asistente institucional de inteligencia artificial de la **Seccional Bucaramanga de la Rama Judicial de Colombia**. Proporciona respuestas precisas sobre documentos normativos, procedimientos administrativos y requisitos del sistema SIERJU, funcionando de forma completamente local y sin conexión a internet.
+
+<CardGroup cols={2}>
+  <Card title="¿Qué es SIAA?" icon="circle-info" href="/introduccion/que-es-siaa">
+    Propósito, capacidades y limitaciones del sistema
+  </Card>
+  <Card title="Instalación" icon="download" href="/instalacion/paso-a-paso">
+    Guía completa de instalación en 8 pasos
+  </Card>
+  <Card title="Inicio Rápido" icon="rocket" href="/introduccion/inicio-rapido">
+    Inicie SIAA y realice su primera consulta
+  </Card>
+  <Card title="Referencia API" icon="code" href="/referencia-api/chat">
+    Endpoints disponibles y ejemplos de uso
+  </Card>
+</CardGroup>
+
+---
+
+## Estado del Sistema (v2.1.27)
+
+<CardGroup cols={4}>
+  <Card title="59 documentos" icon="file-text">
+    Cargados en RAM al inicio
+  </Card>
+  <Card title="~15 segundos" icon="clock">
+    Tiempo promedio de respuesta
+  </Card>
+  <Card title="30–40% hit rate" icon="bolt">
+    Caché LRU activo
+  </Card>
+  <Card title="100% local" icon="shield">
+    Sin datos externos
+  </Card>
+</CardGroup>
+
+---
+
+## Hardware de Producción
+
+| Componente | Detalle |
+|-----------|---------|
+| Equipo    | HP EliteDesk 705 G4 |
+| CPU       | AMD Ryzen 5 PRO 2600 — 6 núcleos / 12 hilos, AVX2 |
+| RAM       | 64 GB DDR4 |
+| GPU       | ❌ RX 550 (sin soporte ROCm — descartada) |
+| SO        | Fedora 43 |
+| Modelo IA | qwen2.5:3b (GGUF Q4_K_M, ~1.8 GB en RAM) |
+
+<Info>
+SIAA está diseñado para operar **sin GPU**, aprovechando los 64 GB de RAM y el soporte AVX2 del Ryzen 5 PRO 2600 para inferencia eficiente en CPU.
+</Info>
+
+---
+
+## Flujo de una Consulta
+
+```
+Usuario (navegador)
+      ↓
+   Nginx :80
+      ↓
+SIAA Proxy Flask :5000
+  ├── ¿Es saludo?     → Respuesta conversacional directa
+  ├── ¿Está en caché? → Respuesta instantánea (~5ms)
+  └── Consulta nueva  → RAG Pipeline
+        ├── Enrutador TF-IDF (59 docs en RAM)
+        ├── Extractor de chunks (ventana deslizante)
+        └── Ollama qwen2.5:3b (CPU, AVX2)
+              ↓
+        Respuesta streaming (SSE)
+```

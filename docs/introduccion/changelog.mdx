@@ -1,0 +1,78 @@
+---
+title: "Historial de Versiones"
+description: "Evolución del sistema SIAA desde v1.x hasta v2.1.27"
+---
+
+# Historial de Versiones
+
+## v2.1.x — Optimización RAG Avanzada
+
+| Versión | Cambio |
+|---------|--------|
+| **v2.1.27** | Encabezado actualizado · comentarios profesionales completos · sin cambios funcionales sobre v2.1.26 |
+| **v2.1.26** | Normalización de tildes/diacríticos en tokenizador y búsqueda · `MIN_FREQ` condicional por longitud · endpoint `/siaa/debug_tokens` |
+| **v2.1.25** | Búsqueda por frases exactas · `MAX_CHUNKS` dinámico para docs >80 chunks · Clarificador de preguntas ambiguas (civil/penal sin especificar) |
+| **v2.1.24** | `CHUNK_SIZE=800`, `MAX_CHUNKS=3` (restaurado por tiempos de 160s) |
+| **v2.1.23** | Marcado `marked.js` v4/v5 compatible · `TERMINOS_SIEMPRE_DOCUMENTAL` |
+| **v2.1.22** | Position bias para preguntas de definición · `num_ctx` dinámico |
+| **v2.1.17** | Detección de preguntas de listado → modo "Escopeta" |
+| **v2.1.16** | Bono de proximidad "Francotirador" — ventana deslizante 150c |
+| **v2.1.15** | Query expansion por tipo de pregunta (cuándo/quién/cómo) |
+| **v2.1.14** | Keywords manuales fijas por documento |
+| **v2.1.11** | IDF local + palabras ultra-comunes excluidas (>85% chunks) |
+| **v2.1.10** | TF real (frecuencia en chunk) en `puntuar_chunk` |
+| **v2.1.8** | `num_thread=6`, `num_batch=512`, `MAX_DOCS=2` |
+| **v2.1.7** | IDF local por chunk — términos raros pesan más |
+| **v2.1.6** | Tokenizador alfanumérico — psaa16, art5, 10476 en índice |
+
+---
+
+## Parámetros de Configuración Actuales (v2.1.27)
+
+```python
+VERSION               = "2.1.27"
+MODEL                 = "qwen2.5:3b"
+CARPETA_FUENTES       = "/opt/siaa/fuentes"
+
+# RAG / chunking
+CHUNK_SIZE            = 800     # chars por chunk
+CHUNK_OVERLAP         = 300     # solapamiento entre chunks
+MAX_CHUNKS_CONTEXTO   = 3       # chunks por documento (máx)
+MAX_DOCS_CONTEXTO     = 2       # documentos por consulta
+TOP_KEYWORDS_POR_DOC  = 20      # keywords TF-IDF por doc
+MIN_FREQ_KEYWORD      = 2       # frecuencia mínima (términos ≤4 chars)
+MIN_LEN_KEYWORD       = 3       # longitud mínima
+
+# Caché LRU
+CACHE_MAX_ENTRADAS    = 200     # entradas máximas
+CACHE_TTL_SEGUNDOS    = 3600    # 1 hora de vigencia
+CACHE_SOLO_DOC        = True    # solo consultas documentales
+
+# Inferencia Ollama
+temperature           = 0.0     # determinístico
+num_predict           = 150     # tokens máx (300 para listados)
+num_ctx               = 2048    # ventana de contexto (adaptativo)
+num_thread            = 6       # núcleos físicos del Ryzen 5 2600
+num_batch             = 512     # batch → menor TTFT
+
+# Servidor
+HILOS_SERVIDOR        = 16      # hilos Waitress
+MAX_OLLAMA_SIMULTANEOS = 2      # semáforo de consultas paralelas
+TIMEOUT_CONEXION      = 8
+TIMEOUT_RESPUESTA     = 180
+
+# Logs
+LOG_ARCHIVO           = "/opt/siaa/logs/calidad.jsonl"
+LOG_MAX_LINEAS        = 5000
+```
+
+---
+
+## Modelos Descartados
+
+| Modelo | Razón |
+|--------|-------|
+| `deepseek-r1:8b` | 90 segundos por consulta — inutilizable |
+| `qwen3:8b` | 6+ minutos — completamente inviable |
+| `llama3.2:3b` | Menor precisión en español legal |
+| `qwen2.5:3b` (**actual**) | ✅ Equilibrio óptimo velocidad/precisión (~15s) |

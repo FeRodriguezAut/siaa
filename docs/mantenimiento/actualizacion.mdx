@@ -1,0 +1,94 @@
+---
+title: "Actualización del Sistema"
+description: "Proceso de actualización de código y rollback"
+---
+
+# Actualización del Sistema
+
+---
+
+## Actualizar el Código
+
+```bash
+# Ir al directorio del proyecto
+cd /opt/siaa
+
+# Ver cambios disponibles
+git fetch origin
+git log HEAD..origin/main --oneline
+
+# Hacer backup antes de actualizar
+cp siaa_proxy.py siaa_proxy.py.backup-$(date +%Y%m%d)
+
+# Actualizar
+git pull origin main
+
+# Reiniciar el servicio
+sudo systemctl restart siaa
+
+# Verificar que arrancó correctamente
+sudo systemctl status siaa
+curl http://localhost:5000/siaa/estado
+```
+
+---
+
+## Rollback
+
+Si la actualización causó problemas:
+
+```bash
+# Restaurar el backup
+cp siaa_proxy.py.backup-YYYYMMDD siaa_proxy.py
+
+# O revertir el commit
+git log --oneline -5
+git revert HEAD   # revertir último commit
+# o
+git checkout COMMIT_HASH -- siaa_proxy.py
+
+# Reiniciar
+sudo systemctl restart siaa
+```
+
+---
+
+## Actualizar el Modelo Ollama
+
+```bash
+# Ver versión actual
+ollama list
+
+# Descargar nueva versión
+ollama pull qwen2.5:3b
+
+# Verificar
+ollama list
+
+# El servicio SIAA detectará el modelo actualizado automáticamente
+sudo systemctl restart siaa
+```
+
+---
+
+## Actualizar Documentos
+
+```bash
+# 1. Agregar/modificar archivos fuente
+cp nuevo_instructivo.docx /opt/siaa/instructivos/"Nombre Juzgado"/
+
+# 2. Reconvertir
+cd /opt/siaa
+python3 convertidor.py     # Word/Excel
+python3 convertidor_pdf.py # PDFs
+
+# 3. Limpiar caché (respuestas previas pueden ser incorrectas)
+curl -X DELETE http://localhost:5000/siaa/cache
+
+# 4. Recargar índice sin reiniciar
+curl http://localhost:5000/siaa/recargar
+
+# 5. Verificar
+curl http://localhost:5000/siaa/estado
+curl "http://localhost:5000/siaa/enrutar?q=prueba+con+nuevo+documento"
+```

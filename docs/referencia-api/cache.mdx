@@ -1,0 +1,34 @@
+---
+title: "GET/DELETE /siaa/cache"
+description: "Estadísticas del caché y limpieza"
+---
+
+# GET /siaa/cache — Estadísticas
+
+```bash
+curl http://localhost:5000/siaa/cache
+```
+
+```json
+{
+  "entradas": 47,
+  "max": 200,
+  "hits": 152,
+  "misses": 89,
+  "hit_rate": "63.1%",
+  "ttl_seg": 3600
+}
+```
+
+# DELETE /siaa/cache — Limpiar
+
+```bash
+curl -X DELETE http://localhost:5000/siaa/cache
+```
+
+```json
+{
+  "vaciado": true,
+  "mensaje": "Caché limpiado correctamente"
+}
+```

@@ -1,0 +1,208 @@
+---
+title: "POST /siaa/chat"
+description: "Endpoint principal de consulta con streaming SSE"
+---
+
+# POST /siaa/chat
+
+Endpoint principal para interactuar con SIAA. Procesa consultas conversacionales y documentales, devolviendo respuestas mediante **Server-Sent Events (SSE)**.
+
+---
+
+## Endpoint
+
+```
+POST /siaa/chat
+```
+
+## Encabezados de la Solicitud
+
+| Encabezado | Valor requerido |
+|-----------|----------------|
+| `Content-Type` | `application/json` |
+
+## Cuerpo de la Solicitud
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "¿Cuándo debo reportar en SIERJU?"
+    }
+  ]
+}
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `messages` | array | Historial de la conversación |
+| `messages[].role` | string | `"user"` o `"assistant"` |
+| `messages[].content` | string | Texto del mensaje |
+
+---
+
+## Respuesta — SSE Stream
+
+```
+Content-Type: text/event-stream
+Cache-Control: no-cache
+X-Accel-Buffering: no
+X-Cache: HIT  ← solo si viene del caché
+```
+
+**Formato de cada evento:**
+
+```
+data: {"choices":[{"delta":{"content":"<token>"}}]}
+```
+
+**Fin del stream:**
+
+```
+data: [DONE]
+```
+
+---
+
+## Tipos de Consulta
+
+### Consulta Documental
+
+Activa el pipeline RAG completo. Se detecta cuando la pregunta:
+- Contiene términos judiciales/técnicos (SIERJU, PSAA, acuerdo, juzgado...)
+- Tiene más de 8 caracteres y no es conversacional
+
+### Consulta Conversacional
+
+Respuesta directa sin buscar documentos. Aplica para:
+- Saludos: "Hola", "Buenos días", "Gracias"
+- Preguntas sobre SIAA: "¿Qué es SIAA?", "¿Para qué sirves?"
+- Confirmaciones: "ok", "entendido", "de acuerdo"
+
+### Respuesta de Clarificación
+
+Cuando la consulta es ambigua (ej. "juzgado civil" sin especificar tipo):
+
+```json
+{
+  "pregunta_clarificacion": "¿A qué tipo de Juzgado Civil se refiere su consulta?",
+  "opciones": [
+    "Juzgado Civil Municipal",
+    "Juzgado Civil del Circuito",
+    "Juzgado Civil de Ejecución de Sentencias"
+  ]
+}
+```
+
+---
+
+## Ejemplos
+
+### Ejemplo 1 — Consulta Documental
+
+```bash
+curl -X POST http://localhost:5000/siaa/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "¿Cuándo debo reportar al SIERJU?"}
+    ]
+  }'
+```
+
+**Respuesta:**
+
+```
+data: {"choices":[{"delta":{"content":"El reporte debe realizarse"}}]}
+data: {"choices":[{"delta":{"content":" el quinto día hábil de cada mes"}}]}
+data: {"choices":[{"delta":{"content":" según el Artículo 3 del PSAA16-10476."}}]}
+data: {"choices":[{"delta":{"content":"\n\n📄 **Fuente:** ACUERDO_NO._PSAA16-10476"}}]}
+data: [DONE]
+```
+
+### Ejemplo 2 — Conversacional
+
+```bash
+curl -X POST http://localhost:5000/siaa/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "Hola"}]}'
+```
+
+**Respuesta:**
+
+```
+data: {"choices":[{"delta":{"content":"Buenos días. Soy SIAA, el Sistema Inteligente de Apoyo Administrativo de la Seccional Bucaramanga. ¿En qué puedo ayudarle?"}}]}
+data: [DONE]
+```
+
+### Ejemplo 3 — Multi-turno
+
+```bash
+curl -X POST http://localhost:5000/siaa/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "¿Quién carga la información en SIERJU?"},
+      {"role": "assistant", "content": "Según el artículo 5 del PSAA16-10476, la responsabilidad recae en el funcionario titular del despacho."},
+      {"role": "user", "content": "¿Puede hacerlo un asistente?"}
+    ]
+  }'
+```
+
+---
+
+## Comportamiento del Caché
+
+| Situación | Comportamiento |
+|-----------|----------------|
+| Primera vez que se hace la pregunta | RAG completo (~25s) |
+| Misma pregunta (dentro de 1 hora) | Caché hit (~5ms), encabezado `X-Cache: HIT` |
+| Después de `curl -X DELETE /siaa/cache` | Fuerza RAG completo nuevamente |
+
+La clave del caché ignora tildes, puntuación y mayúsculas.
+
+---
+
+## Errores
+
+Los errores se envían como eventos SSE:
+
+| Error | Mensaje |
+|-------|---------|
+| Máx. consultas simultáneas | `⏳ Sistema ocupado. Intente en 30 segundos.` |
+| Timeout de conexión | `⚠ IA no responde. Intente de nuevo.` |
+| Timeout de respuesta | `⏱ Consulta tomó demasiado tiempo.` |
+| Ollama no disponible | `⚠ Servidor IA reiniciándose. Espere 1 minuto.` |
+
+---
+
+## Implementación en JavaScript (Frontend)
+
+```javascript
+const response = await fetch('/siaa/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ messages })
+});
+
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  
+  const text = decoder.decode(value);
+  const lines = text.split('\n').filter(l => l.startsWith('data: '));
+  
+  for (const line of lines) {
+    const data = line.slice(6);
+    if (data === '[DONE]') return;
+    
+    const parsed = JSON.parse(data);
+    const content = parsed.choices?.[0]?.delta?.content || '';
+    // Agregar content al elemento de respuesta
+  }
+}
+```

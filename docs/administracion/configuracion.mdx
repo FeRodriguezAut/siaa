@@ -1,0 +1,107 @@
+---
+title: "Configuración del Sistema"
+description: "Guía completa de todos los parámetros configurables de SIAA"
+---
+
+# Configuración del Sistema
+
+Todos los parámetros se encuentran en la sección inicial de `siaa_proxy.py`. No se requieren archivos externos de configuración.
+
+---
+
+## Configuración del Servidor Proxy
+
+```python
+VERSION                = "2.1.27"
+MODEL                  = "qwen2.5:3b"
+OLLAMA_URL             = "http://localhost:11434"
+CARPETA_FUENTES        = "/opt/siaa/fuentes"
+MAX_OLLAMA_SIMULTANEOS = 2      # Consultas paralelas al LLM
+HILOS_SERVIDOR         = 16     # Hilos del servidor Waitress
+TIMEOUT_CONEXION       = 8      # Segundos para conectar a Ollama
+TIMEOUT_RESPUESTA      = 180    # Segundos máximo por consulta
+```
+
+---
+
+## Configuración RAG
+
+```python
+CHUNK_SIZE            = 800     # Caracteres por chunk
+CHUNK_OVERLAP         = 300     # Solapamiento entre chunks (mínimo 30% de CHUNK_SIZE)
+MAX_CHUNKS_CONTEXTO   = 3       # Chunks máximos por documento
+MAX_DOCS_CONTEXTO     = 2       # Documentos máximos por consulta
+TOP_KEYWORDS_POR_DOC  = 20      # Keywords TF-IDF top N por documento
+MIN_FREQ_KEYWORD      = 2       # Frecuencia mínima (para términos ≤4 chars)
+MIN_LEN_KEYWORD       = 3       # Longitud mínima de keyword
+```
+
+**Guía de trade-offs:**
+
+| Si... | Ajuste |
+|-------|--------|
+| Las respuestas son lentas (>45s) | Bajar `CHUNK_SIZE` a 600 |
+| Las respuestas se cortan o están incompletas | Subir `MAX_CHUNKS_CONTEXTO` a 4 |
+| El enrutador no detecta documentos técnicos | Subir `TOP_KEYWORDS_POR_DOC` a 30 |
+| Respuestas de calidad baja en docs grandes | Aumentar `CHUNK_OVERLAP` a 400 |
+
+---
+
+## Configuración de Inferencia Ollama
+
+```python
+"options": {
+    "temperature":    0.0,    # 0 = determinístico; nunca subir en producción
+    "num_predict":    150,    # Tokens de respuesta (300 para listados)
+    "num_ctx":        2048,   # Ventana de contexto adaptativa
+    "num_thread":     6,      # = núcleos FÍSICOS del CPU (no lógicos)
+    "num_batch":      512,    # Batch prefill — mayor es más rápido al inicio
+    "repeat_penalty": 1.1,
+}
+```
+
+---
+
+## Configuración del Caché
+
+```python
+CACHE_MAX_ENTRADAS = 200    # ~1MB de RAM total
+CACHE_TTL_SEGUNDOS = 3600   # 1 hora de vigencia
+CACHE_SOLO_DOC     = True   # No cachear saludos
+```
+
+---
+
+## Variables de Entorno (Opcionales)
+
+```bash
+# IP del servidor (para los links de "Ver documento")
+export SIAA_SERVER_IP="192.168.1.100"
+
+# Puerto del proxy
+export SIAA_SERVER_PORT="5000"
+```
+
+Si no se configuran, el sistema detecta la IP automáticamente del encabezado `Host` de cada solicitud.
+
+---
+
+## Optimizaciones del Sistema Operativo
+
+```bash
+# CPU en modo performance (no powersave)
+echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+
+# Reducir swapping (con 64GB RAM no debería necesitarse)
+sudo sysctl vm.swappiness=5
+echo "vm.swappiness=5" | sudo tee -a /etc/sysctl.conf
+
+# Aumentar límite de archivos abiertos
+echo "fs.file-max=65536" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+
+# Prioridad del proceso Ollama (+5 de prioridad)
+sudo renice -n -5 $(pgrep ollama)
+```
+
+Estos ajustes pueden dar un **5–10% de mejora** en tiempo de inferencia.

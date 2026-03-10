@@ -1,0 +1,57 @@
+---
+title: "Análisis de Logs"
+description: "Herramientas para analizar el log JSONL de calidad del sistema"
+---
+
+# Análisis de Logs de Calidad
+
+El log en `/opt/siaa/logs/calidad.jsonl` registra cada consulta con métricas completas.
+
+---
+
+## Análisis con jq
+
+```bash
+# Distribución de tipos de consulta
+cat /opt/siaa/logs/calidad.jsonl | jq -r '.tipo' | sort | uniq -c
+
+# Consultas más lentas (top 10)
+cat /opt/siaa/logs/calidad.jsonl \
+  | jq -r '[.pregunta, .tiempo_s] | @tsv' \
+  | sort -k2 -rn | head -10
+
+# Alucinaciones por documento
+cat /opt/siaa/logs/calidad.jsonl \
+  | jq 'select(.alerta == "POSIBLE_ALUCINACION") | .docs[]' \
+  | sort | uniq -c | sort -rn
+
+# Tiempo promedio por hora del día
+cat /opt/siaa/logs/calidad.jsonl \
+  | jq -r '[(.ts | .[11:13]), .tiempo_s] | @tsv' \
+  | awk '{sum[$1]+=$2; n[$1]++} END {for (h in sum) print h, sum[h]/n[h]}'
+```
+
+---
+
+## Análisis con Python
+
+```python
+import json
+from collections import Counter, defaultdict
+
+with open('/opt/siaa/logs/calidad.jsonl') as f:
+    logs = [json.loads(l) for l in f if l.strip()]
+
+# Resumen general
+total     = len(logs)
+errores   = sum(1 for l in logs if l['alerta'] == 'ERROR')
+alucs     = sum(1 for l in logs if l['alerta'] == 'POSIBLE_ALUCINACION')
+hits      = sum(1 for l in logs if l['tipo'] == 'CACHE_HIT')
+t_prom    = sum(l['tiempo_s'] for l in logs if l['tiempo_s'] > 0) / max(1, total - hits)
+
+print(f"Total: {total} | Errores: {errores} | Alucinaciones: {alucs} | Cache hits: {hits} | T.prom: {t_prom:.1f}s")
+
+# Documentos más consultados
+doc_counter = Counter(doc for l in logs for doc in l.get('docs', []))
+print("Top documentos:", doc_counter.most_common(5))
+```

@@ -1,0 +1,110 @@
+---
+title: "Configuración del Sistema"
+description: "Todos los parámetros de SIAA con explicación y guía de ajuste"
+---
+
+# Configuración del Sistema
+
+Todos los parámetros de SIAA se encuentran al inicio de `siaa_proxy.py`. No se requieren archivos `.env` separados.
+
+---
+
+## Parámetros del Servidor
+
+```python
+VERSION                = "2.1.27"
+MODEL                  = "qwen2.5:3b"
+OLLAMA_URL             = "http://localhost:11434"
+CARPETA_FUENTES        = "/opt/siaa/fuentes"
+MAX_OLLAMA_SIMULTANEOS = 2      # máx consultas paralelas al LLM
+HILOS_SERVIDOR         = 16     # hilos Waitress
+TIMEOUT_CONEXION       = 8      # segundos para conectar a Ollama
+TIMEOUT_RESPUESTA      = 180    # segundos máx por respuesta
+```
+
+---
+
+## Parámetros RAG
+
+| Parámetro | Valor | Descripción | Cuándo ajustar |
+|-----------|-------|-------------|----------------|
+| `CHUNK_SIZE` | `800` | Caracteres por chunk | Bajar a 600 si las respuestas son lentas; subir a 1000 para docs complejos |
+| `CHUNK_OVERLAP` | `300` | Solapamiento entre chunks | Mínimo 30% de `CHUNK_SIZE`; garantiza que artículos no se corten |
+| `MAX_CHUNKS_CONTEXTO` | `3` | Chunks máx por documento | Subir a 4 para preguntas complejas; no superar 5 (lento) |
+| `MAX_DOCS_CONTEXTO` | `2` | Documentos máx por consulta | Mantener en 2; 3 puede superar `num_ctx` |
+| `TOP_KEYWORDS_POR_DOC` | `20` | Keywords TF-IDF por doc | Subir a 30 si el enrutador falla en docs técnicos |
+| `MIN_FREQ_KEYWORD` | `2` | Frecuencia mínima (≤4 chars) | Bajar a 1 para vocabulario muy especializado |
+| `MIN_LEN_KEYWORD` | `3` | Longitud mínima de keyword | No bajar de 3 |
+
+---
+
+## Parámetros de Inferencia Ollama
+
+```python
+"options": {
+    "temperature":    0.0,    # Determinístico — sin inventar
+    "num_predict":    150,    # Default; 300 para preguntas de listado
+    "num_ctx":        2048,   # Adaptativo: 1024 / 2048 / 3072 según contexto
+    "num_thread":     6,      # Núcleos FÍSICOS del Ryzen 5 2600 (no SMT)
+    "num_batch":      512,    # Batch grande → menor tiempo al primer token
+    "repeat_penalty": 1.1,
+    "stop": ["\n\n\n", "Espero que", "Es importante destacar",
+             "Cabe destacar que", "En conclusión,", "Sin embargo,"]
+}
+```
+
+<Warning>
+**`num_thread=6`** usa exactamente los 6 núcleos físicos del Ryzen 5 2600. No use 12 (hilos SMT) — genera thrashing y aumenta la latencia en ~40%.
+</Warning>
+
+---
+
+## Parámetros del Caché LRU
+
+```python
+CACHE_MAX_ENTRADAS = 200    # Entradas máximas (~1MB en RAM)
+CACHE_TTL_SEGUNDOS = 3600   # 1 hora — normativa no cambia frecuentemente
+CACHE_SOLO_DOC     = True   # Solo cachear consultas documentales (no saludos)
+```
+
+**Guía de ajuste:**
+
+- **Aumentar `CACHE_MAX_ENTRADAS`** si tiene >50 despachos o muchas preguntas únicas frecuentes.
+- **Aumentar `CACHE_TTL_SEGUNDOS`** a 7200-14400 si los documentos cambian poco.
+- **Borrar caché** después de actualizar documentos: `curl -X DELETE http://localhost:5000/siaa/cache`
+
+---
+
+## Parámetros de Log de Calidad
+
+```python
+LOG_ARCHIVO    = "/opt/siaa/logs/calidad.jsonl"
+LOG_MAX_LINEAS = 5000    # Rota al llegar a 5000 líneas (~2MB)
+```
+
+---
+
+## Modelfile Personalizado (Mejora Rápida)
+
+Cree un Modelfile para fijar los parámetros de forma permanente en Ollama:
+
+```bash
+cat > /opt/siaa/Modelfile << 'EOF'
+FROM qwen2.5:3b
+PARAMETER num_thread 6
+PARAMETER num_batch 512
+PARAMETER temperature 0.0
+PARAMETER num_ctx 2048
+PARAMETER repeat_penalty 1.1
+EOF
+
+ollama create siaa-qwen -f /opt/siaa/Modelfile
+```
+
+Luego en `siaa_proxy.py`:
+
+```python
+MODEL = "siaa-qwen"    # Reemplaza "qwen2.5:3b"
+```
+
+Esto aplica los parámetros sin necesidad de pasarlos en cada llamada API.

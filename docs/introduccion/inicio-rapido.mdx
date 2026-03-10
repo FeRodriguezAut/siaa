@@ -1,0 +1,182 @@
+---
+title: "Inicio Rápido"
+description: "Ponga en marcha SIAA y realice su primera consulta en minutos"
+---
+
+# Inicio Rápido
+
+Esta guía le permite iniciar SIAA, convertir sus primeros documentos y realizar su primera consulta inteligente.
+
+<Warning>
+Complete la [guía de instalación](/instalacion/paso-a-paso) antes de continuar.
+</Warning>
+
+---
+
+## Paso 1 — Iniciar el Servicio Ollama
+
+```bash
+# Iniciar Ollama en primer plano (abra una terminal nueva para los siguientes pasos)
+ollama serve
+
+# Verificar que el modelo está disponible
+curl http://localhost:11434/api/tags
+# Debe aparecer "qwen2.5:3b" en la respuesta
+```
+
+Para ejecutar en segundo plano:
+```bash
+nohup ollama serve > /tmp/ollama.log 2>&1 &
+```
+
+---
+
+## Paso 2 — Iniciar el Proxy Flask
+
+```bash
+cd /opt/siaa
+python3 siaa_proxy.py
+```
+
+Al iniciar correctamente verá:
+
+```
+════════════════════════════════════════════════════════
+  SIAA v2.1.27 — Sistema Inteligente de Apoyo Administrativo
+  Seccional Bucaramanga — Rama Judicial
+════════════════════════════════════════════════════════
+  Ollama URL    : http://localhost:11434
+  Modelo        : qwen2.5:3b
+  Puerto        : 5000
+  Hilos         : 16
+  [Doc] Total: 59 docs en 3 colecciones ✓
+  [IDX] Índice densidad: 12,543 términos ✓
+  [CHK] Chunks pre-calculados: 2,847 total ✓
+════════════════════════════════════════════════════════
+```
+
+<Tip>
+Para producción, configure SIAA como servicio systemd. Consulte la [guía de servicio systemd](/instalacion/systemd).
+</Tip>
+
+---
+
+## Paso 3 — Verificar Estado del Sistema
+
+```bash
+curl http://localhost:5000/siaa/estado
+```
+
+Respuesta esperada:
+
+```json
+{
+  "status": "ok",
+  "version": "2.1.27",
+  "model": "qwen2.5:3b",
+  "ollama_disponible": true,
+  "documentos_cargados": 59,
+  "cache": {
+    "entradas": 0,
+    "max": 200,
+    "hits": 0,
+    "misses": 0,
+    "hit_rate": "0.0%",
+    "ttl_seg": 3600
+  }
+}
+```
+
+---
+
+## Paso 4 — Convertir Documentos
+
+**Para documentos Word/Excel institucionales:**
+
+```bash
+# Coloque los archivos en subcarpetas de /opt/siaa/instructivos/
+mkdir -p /opt/siaa/instructivos/"Juzgado Civil Municipal"
+# Copie .docx y .xlsx a esa carpeta
+
+# Ejecutar el convertidor
+cd /opt/siaa
+python3 convertidor.py
+```
+
+**Para documentos PDF (acuerdos, resoluciones):**
+
+```bash
+cp acuerdo_psaa16-10476.pdf /opt/siaa/pdfs_origen/
+python3 convertidor_pdf.py
+```
+
+**Recargar el índice después de agregar documentos:**
+
+```bash
+curl http://localhost:5000/siaa/recargar
+```
+
+---
+
+## Paso 5 — Primera Consulta
+
+**Interfaz web:**
+
+Abra su navegador en `http://localhost` (o la IP del servidor).
+
+**Ejemplos de consultas:**
+
+- `"¿Qué es el SIERJU?"`
+- `"¿Cuándo debo reportar la información?"`
+- `"¿Quién es responsable de cargar los datos?"`
+- `"¿Qué sanciones hay por incumplimiento?"`
+- `"¿Cómo se diligencia el inventario final?"`
+
+**Vía API (curl):**
+
+```bash
+curl -X POST http://localhost:5000/siaa/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "¿Qué es el SIERJU?"}]}'
+```
+
+---
+
+## Paso 6 — Monitorear la Calidad
+
+```bash
+# Ver las últimas 20 consultas
+curl "http://localhost:5000/siaa/log?n=20&formato=txt"
+
+# Ver posibles alucinaciones
+curl "http://localhost:5000/siaa/log?alerta=POSIBLE_ALUCINACION"
+
+# Estadísticas del caché
+curl http://localhost:5000/siaa/cache
+```
+
+---
+
+## Consejos de Rendimiento
+
+| Situación | Solución |
+|-----------|----------|
+| Primera consulta lenta | Normal — el modelo se carga en RAM (~30s). Las siguientes son más rápidas |
+| Consulta frecuente lenta | Esperar — el caché LRU la capturará a partir de la 2ª vez (~5ms) |
+| Respuesta incorrecta | Verificar con `/siaa/enrutar?q=su+pregunta` qué documentos detectó |
+| "No encontré" incorrecto | Verificar con `/siaa/fragmento?doc=archivo.md&q=pregunta` qué chunk extrajo |
+
+---
+
+## Diagnóstico Rápido
+
+```bash
+# ¿Qué documentos detectó el enrutador para esta pregunta?
+curl "http://localhost:5000/siaa/enrutar?q=consecuencias+por+no+reportar+sierju"
+
+# ¿Qué fragmento llegaría al modelo?
+curl "http://localhost:5000/siaa/fragmento?doc=acuerdo_no._psaa16-10476.md&q=sanciones"
+
+# ¿Cuáles son las keywords de un documento?
+curl "http://localhost:5000/siaa/keywords/acuerdo_no._psaa16-10476.md"
+```

@@ -1,0 +1,102 @@
+---
+title: "Conversión de PDFs"
+description: "Convertir PDFs nativos y escaneados a Markdown con pymupdf4llm y Tesseract OCR"
+---
+
+# Conversión de PDFs
+
+El `convertidor_pdf.py` convierte PDFs a Markdown con detección automática entre documentos con texto nativo y documentos escaneados.
+
+---
+
+## Detección Automática Nativo vs. OCR
+
+```python
+MIN_CHARS = 200   # Umbral mínimo de caracteres extraídos
+
+# Intentar extracción nativa primero
+texto = pymupdf4llm.to_markdown(ruta_pdf)
+
+if len(texto) >= MIN_CHARS:
+    # ✅ PDF nativo — usar pymupdf4llm (rápido y preciso)
+    guardar_markdown(texto)
+else:
+    # ⚠ PDF escaneado — activar OCR con Tesseract
+    imagenes = pdf2image.convert_from_path(ruta_pdf, dpi=300)
+    texto_ocr = "\n".join(pytesseract.image_to_string(img, lang="spa")
+                          for img in imagenes)
+    guardar_markdown(texto_ocr)
+```
+
+---
+
+## Configuración
+
+```python
+CARPETA_ENTRADA = "/opt/siaa/pdfs_origen"
+CARPETA_SALIDA  = "/opt/siaa/fuentes/normativa"
+MIN_CHARS       = 200    # Umbral para activar OCR
+OCR_DPI         = 300    # Resolución (300 DPI = buena calidad sin ser excesivo)
+OCR_LANG        = "spa"  # Idioma Tesseract
+```
+
+---
+
+## Ejecutar la Conversión
+
+```bash
+# Modo automático (detecta nativo vs. escaneado)
+cd /opt/siaa
+python3 convertidor_pdf.py
+
+# Forzar OCR para todos (útil si pymupdf extrae texto incorrecto)
+python3 convertidor_pdf.py --forzar-ocr
+
+# Reconvertir solo PDFs que fallaron o produjeron texto vacío
+python3 convertidor_pdf.py --reconvertir
+```
+
+---
+
+## Salida del Convertidor
+
+```
+=======================================================
+  SIAA Convertidor PDF v2.0
+  PDFs: 3 | Modo: Auto
+  Salida: /opt/siaa/fuentes/normativa
+=======================================================
+
+  📂 acuerdo_psaa16-10476.pdf
+    ✅ acuerdo_psaa16-10476.md → 24,679 chars [pymupdf4llm]
+
+  📂 resolucion_escaneada.pdf
+    ⚠ pymupdf extrajo 45 chars → OCR automático...
+    📷 Convirtiendo a imágenes (DPI=300)...
+    📄 5 página(s)
+    🔍 OCR página 5/5...
+    ✅ resolucion_escaneada.md → 8,234 chars [OCR Tesseract]
+
+  📂 acuerdo_corrupto.pdf
+    ❌ Error: archivo dañado — omitido
+```
+
+---
+
+## Calidad del OCR
+
+**Para mejores resultados:**
+- Escanear a mínimo 300 DPI
+- Preferir escala de grises sobre color (más rápido en OCR)
+- Documentos muy claros con fuentes estándar → calidad >95%
+- Documentos con sello, marca de agua o fondo → calidad puede bajar a 70-80%
+
+**Si el OCR produce texto incorrecto:**
+```bash
+# Probar con mayor resolución
+python3 -c "
+import pdf2image, pytesseract
+imgs = pdf2image.convert_from_path('archivo.pdf', dpi=400)
+print(pytesseract.image_to_string(imgs[0], lang='spa'))
+"
+```

@@ -1,0 +1,122 @@
+---
+title: "Estrategia de Chunks"
+description: "Chunking con ventana deslizante, solapamiento y selección adaptativa Francotirador/Escopeta"
+---
+
+# Estrategia de Chunks
+
+SIAA divide cada documento en fragmentos con solapamiento antes de indexarlo. Esto garantiza que artículos, listas numeradas y procedimientos nunca queden partidos entre dos chunks.
+
+---
+
+## Chunking con Ventana Deslizante
+
+```python
+CHUNK_SIZE    = 800   # Chars por chunk
+CHUNK_OVERLAP = 300   # Solapamiento entre chunks consecutivos
+
+def chunking_con_solapamiento(contenido: str) -> list:
+    chunks = []
+    inicio = 0
+    while inicio < len(contenido):
+        fin = min(inicio + CHUNK_SIZE, len(contenido))
+        # Extender hasta el próximo salto de línea
+        if fin < len(contenido):
+            salto = contenido.find('\n', fin)
+            if salto != -1 and salto - fin < 100:
+                fin = salto
+        
+        chunks.append({
+            "texto":   contenido[inicio:fin],
+            "seccion": _ultimo_encabezado(contenido[:fin]),
+            "indice":  idx,
+        })
+        inicio += CHUNK_SIZE - CHUNK_OVERLAP   # ← solapamiento
+    return chunks
+```
+
+**Ejemplo visual:**
+
+```
+Documento: [=== 800 chars ===][=== 800 chars ===][=== 800 chars ===]...
+
+Chunk 0:   [==============================]                    (chars 0–800)
+Chunk 1:              [==============================]          (chars 500–1300)
+Chunk 2:                         [==============================] (chars 1000–1800)
+            ← 300 chars solapados entre chunks consecutivos →
+```
+
+---
+
+## Chunks Pre-calculados en RAM
+
+Al arrancar el servidor, todos los chunks se calculan y almacenan en RAM:
+
+```python
+chunks_por_doc = {}   # dict: nombre_doc → lista de chunks
+
+# Al cargar documentos:
+for nombre_doc, doc in todos_los_docs.items():
+    chunks_por_doc[nombre_doc] = chunking_con_solapamiento(doc["contenido"])
+```
+
+Esto elimina el costo de chunking en cada consulta. Con 59 documentos se pre-calculan ~2.800 chunks.
+
+---
+
+## Metadatos de Sección
+
+Cada chunk incluye el último encabezado Markdown visto antes de su inicio:
+
+```python
+def _ultimo_encabezado(texto: str) -> str:
+    encabezados = re.findall(r'^#{1,3}\s+(.+)$', texto, re.MULTILINE)
+    return encabezados[-1].upper() if encabezados else "INICIO"
+```
+
+Esto permite mostrar al modelo la sección de donde viene el chunk:
+
+```
+[SEC: ARTÍCULO 5° — RESPONSABILIDADES | CHUNK: 12]
+El funcionario titular del despacho es responsable de...
+```
+
+---
+
+## Selección Adaptativa — "Francotirador vs. Escopeta"
+
+Después de puntuar todos los chunks, el sistema decide cuántos enviar al modelo:
+
+```python
+ratio = score_chunk_1 / score_chunk_2
+
+ratio ≥ 3.0  →  FRANCOTIRADOR: 1 chunk   (~800 chars ≈ 200 tokens)
+ratio ≥ 1.8  →  BINÓCULO:      2 chunks  (~1600 chars ≈ 400 tokens)
+ratio < 1.8  →  ESCOPETA:      3 chunks  (~2400 chars ≈ 600 tokens)
+
+# Excepciones:
+Pregunta de listado  →  mínimo 2 chunks (siempre)
+Documento >80 chunks →  máximo 4 chunks
+```
+
+**Lógica de negocio:**
+- **Francotirador**: Alta certeza → manda menos tokens al modelo → respuesta más rápida
+- **Escopeta**: Incertidumbre → manda más contexto para no perder información
+- **Listados**: "¿Cuáles son los roles?" → la respuesta está distribuida en múltiples chunks
+
+---
+
+## IDF Local por Documento
+
+Para puntuar los chunks, se calcula el IDF dentro del propio documento (no en toda la colección):
+
+```python
+for w in palabras:
+    chunks_con_w = sum(1 for c in chunks if w in c["texto"].lower())
+    idf_val = log((total_chunks + 1) / (chunks_con_w + 1)) + 1.0
+    # Excluir palabras ultra-comunes: aparecen en >85% de chunks
+    if chunks_con_w / total_chunks <= 0.85:
+        idf_local[w] = idf_val
+```
+
+**¿Por qué IDF local?** En un documento de 198 chunks sobre SIERJU, la palabra "sierju" aparece en casi todos → IDF bajo → no es útil para distinguir chunks. Pero "incumplimiento" puede aparecer solo en 3 chunks → IDF alto → señal fuerte.

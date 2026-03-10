@@ -1,0 +1,41 @@
+---
+title: "GET /siaa/log"
+description: "Consultar el log de calidad de consultas"
+---
+
+# GET /siaa/log
+
+Ver las últimas N entradas del log de calidad con estadísticas de resumen.
+
+## Parámetros
+
+| Parámetro | Tipo | Defecto | Descripción |
+|-----------|------|---------|-------------|
+| `n` | int | 50 | Entradas a mostrar (máx 500) |
+| `tipo` | string | — | `CONV`, `DOC`, `CACHE_HIT`, `ERROR` |
+| `alerta` | string | — | `OK`, `SIN_CONTEXTO`, `POSIBLE_ALUCINACION`, `ERROR` |
+| `formato` | string | `json` | `json` o `txt` |
+
+## Ejemplos
+
+```bash
+curl "http://localhost:5000/siaa/log?n=50"
+curl "http://localhost:5000/siaa/log?alerta=POSIBLE_ALUCINACION"
+curl "http://localhost:5000/siaa/log?n=20&formato=txt"
+```
+
+## Respuesta
+
+```json
+{
+  "resumen": {
+    "total_consultas":        847,
+    "errores":                3,
+    "posibles_alucinaciones": 12,
+    "cache_hits":             243,
+    "tiempo_promedio_s":      26.4
+  },
+  "entradas": [...],
+  "mostrando": 50
+}
+```

@@ -1,0 +1,106 @@
+---
+title: "Requisitos del Sistema"
+description: "Software, dependencias y comandos de verificación para SIAA"
+---
+
+# Requisitos del Sistema
+
+## Software Requerido
+
+<CardGroup cols={2}>
+  <Card title="Python 3.8+" icon="python">
+    Python 3.8 o superior. En Fedora 43 se usa Python 3.14.
+  </Card>
+  <Card title="LibreOffice Headless" icon="file-text">
+    Para convertir documentos .doc y .pdf a .docx
+  </Card>
+  <Card title="Tesseract OCR" icon="eye">
+    OCR para PDFs escaneados. Requiere paquete de idioma español.
+  </Card>
+  <Card title="Ollama" icon="brain">
+    Motor de inferencia local para qwen2.5:3b
+  </Card>
+</CardGroup>
+
+---
+
+## Instalar Dependencias del Sistema
+
+**Fedora 43 / RHEL (sistema de producción):**
+
+```bash
+sudo dnf install libreoffice-headless tesseract tesseract-langpack-spa poppler-utils -y
+```
+
+**Debian / Ubuntu:**
+
+```bash
+sudo apt install libreoffice-headless tesseract-ocr tesseract-ocr-spa poppler-utils -y
+```
+
+---
+
+## Instalar Dependencias Python
+
+```bash
+pip install flask flask-cors waitress requests \
+            python-docx pandas openpyxl xlrd \
+            pymupdf4llm pdf2image pytesseract \
+            --break-system-packages
+```
+
+<Note>
+La opción `--break-system-packages` es necesaria en Fedora 43 y sistemas con entornos Python gestionados externamente.
+</Note>
+
+**Dependencias clave:**
+
+| Paquete | Propósito |
+|---------|-----------|
+| `flask` + `flask-cors` | Servidor web y API REST |
+| `waitress` | WSGI de producción (reemplaza a Gunicorn) |
+| `python-docx` | Lectura de documentos Word |
+| `pymupdf4llm` | Conversión PDF → Markdown (nativo) |
+| `pdf2image` + `pytesseract` | OCR para PDFs escaneados |
+| `pandas` + `openpyxl` + `xlrd` | Procesamiento de Excel |
+
+---
+
+## Instalar y Configurar Ollama
+
+```bash
+# Instalar Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Descargar el modelo
+ollama pull qwen2.5:3b
+
+# Verificar instalación
+ollama list
+# Debe mostrar: qwen2.5:3b
+```
+
+---
+
+## Verificación Completa
+
+```bash
+# Python
+python3 --version
+# Python 3.8 o superior
+
+# LibreOffice
+libreoffice --headless --version
+
+# Tesseract con español
+tesseract --list-langs | grep spa
+
+# Ollama
+curl http://localhost:11434/api/tags
+
+# Flask
+python3 -c "import flask; print(flask.__version__)"
+
+# pymupdf4llm
+python3 -c "import pymupdf4llm; print('OK')"
+```

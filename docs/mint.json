@@ -1,0 +1,112 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "SIAA — Rama Judicial Bucaramanga",
+  "logo": {
+    "light": "/logo/rama-judicial-light.svg",
+    "dark": "/logo/rama-judicial-dark.svg"
+  },
+  "favicon": "/favicon.ico",
+  "colors": {
+    "primary": "#003366",
+    "light": "#4a90d9",
+    "dark": "#001f3f",
+    "anchors": {
+      "from": "#003366",
+      "to": "#004080"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "GitHub",
+      "url": "https://github.com/FeRodriguezAut/siaa"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Repositorio",
+    "url": "https://github.com/FeRodriguezAut/siaa"
+  },
+  "navigation": [
+    {
+      "group": "Inicio",
+      "pages": [
+        "introduccion/bienvenida",
+        "introduccion/que-es-siaa",
+        "introduccion/inicio-rapido",
+        "introduccion/changelog"
+      ]
+    },
+    {
+      "group": "Instalación",
+      "pages": [
+        "instalacion/requisitos",
+        "instalacion/paso-a-paso",
+        "instalacion/configuracion",
+        "instalacion/systemd"
+      ]
+    },
+    {
+      "group": "Características Principales",
+      "pages": [
+        "caracteristicas/recuperacion-inteligente",
+        "caracteristicas/pipeline-documentos",
+        "caracteristicas/cache-lru",
+        "caracteristicas/monitoreo-calidad"
+      ]
+    },
+    {
+      "group": "Procesamiento de Documentos",
+      "pages": [
+        "procesamiento-documentos/word",
+        "procesamiento-documentos/pdf",
+        "procesamiento-documentos/excel-sqlite"
+      ]
+    },
+    {
+      "group": "Arquitectura del Sistema",
+      "pages": [
+        "arquitectura/vision-general",
+        "arquitectura/enrutador-documentos",
+        "arquitectura/estrategia-chunks",
+        "arquitectura/integracion-ollama"
+      ]
+    },
+    {
+      "group": "Administración",
+      "pages": [
+        "administracion/configuracion",
+        "administracion/monitoreo",
+        "administracion/analisis-logs",
+        "administracion/gestion-cache"
+      ]
+    },
+    {
+      "group": "Referencia API",
+      "pages": [
+        "referencia-api/chat",
+        "referencia-api/estado",
+        "referencia-api/ver-documento",
+        "referencia-api/recargar",
+        "referencia-api/cache",
+        "referencia-api/log",
+        "referencia-api/keywords",
+        "referencia-api/densidad",
+        "referencia-api/enrutar",
+        "referencia-api/fragmento"
+      ]
+    },
+    {
+      "group": "Mantenimiento",
+      "pages": [
+        "mantenimiento/monitoreo",
+        "mantenimiento/solucionar-problemas",
+        "mantenimiento/actualizacion"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/FeRodriguezAut/siaa"
+  },
+  "feedback": {
+    "thumbsRating": true
+  }
+}

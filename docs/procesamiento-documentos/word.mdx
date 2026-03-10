@@ -1,0 +1,106 @@
+---
+title: "Conversión de Documentos Word"
+description: "Convertir archivos .doc y .docx a Markdown indexable con convertidor.py"
+---
+
+# Conversión de Documentos Word
+
+El `convertidor.py` procesa pares de archivos (Word + Excel) organizados en subcarpetas, generando archivos Markdown para el RAG y tablas SQLite para consultas estructuradas.
+
+---
+
+## Estructura de Carpetas Requerida
+
+```
+/opt/siaa/instructivos/
+└── Nombre del Juzgado/         ← Una carpeta por juzgado/dependencia
+    ├── instructivo.docx         ← Documento Word principal
+    └── estadisticas.xlsx        ← Excel (opcional)
+```
+
+<Warning>
+Cada subcarpeta debe contener **un solo archivo Word** y **un solo archivo Excel**. Si hay más de uno de cada tipo, el convertidor tomará el primero en orden alfabético.
+</Warning>
+
+---
+
+## Ejecutar la Conversión
+
+```bash
+# Convertir todos los documentos
+cd /opt/siaa
+python3 convertidor.py
+
+# Solo una carpeta específica
+python3 convertidor.py --only-folder "Juzgado Civil Municipal"
+
+# Rutas personalizadas
+python3 convertidor.py \
+  --origen /ruta/de/entrada \
+  --dest-md /ruta/salida \
+  --db /ruta/base.db \
+  --log /ruta/log.txt
+```
+
+---
+
+## Configuración Interna
+
+```python
+DEFAULT_ORIGEN  = Path("/opt/siaa/instructivos")
+DEFAULT_DEST_MD = Path("/opt/siaa/fuentes")
+DEFAULT_DB      = Path("/opt/siaa/institucional.db")
+DEFAULT_LOG     = Path("/opt/siaa/logs/conversion_errores.log")
+TEMP_DIR        = Path("/tmp/siaa_temp")
+```
+
+---
+
+## Salida del Convertidor
+
+```
+==========================================================
+  SIAA — Convertidor Completo
+  Origen : /opt/siaa/instructivos
+  MD     : /opt/siaa/fuentes
+==========================================================
+
+  → Juzgado Civil Municipal (.docx) ... ✅ (1.2s)
+  → Juzgado Penal (.docx)           ... ✅ (0.8s)
+  → Juzgado de Familia (.docx)      ... ⚠ Excel no encontrado (0.5s)
+
+=== Markdown generados ===
+  juzgado_civil_municipal.md   (45,231 chars)
+  juzgado_penal.md             (38,102 chars)
+  juzgado_de_familia.md        (29,876 chars)
+
+=== Tablas SQLite ===
+  juzgado_civil_municipal: 45 filas
+  juzgado_penal: 38 filas
+```
+
+---
+
+## Proceso Interno
+
+1. LibreOffice headless convierte `.doc` → `.docx` (si es necesario)
+2. `python-docx` extrae el texto y la estructura del `.docx`
+3. Se genera el Markdown con encabezados `#`, `##`, listas y tablas
+4. El Excel se importa a SQLite con `pandas` + `openpyxl`
+5. El convertidor llama a `/siaa/recargar` automáticamente al terminar
+
+---
+
+## Solución de Problemas
+
+```bash
+# Ver errores de conversión
+cat /opt/siaa/logs/conversion_errores.log
+
+# Verificar LibreOffice
+which libreoffice
+libreoffice --headless --version
+
+# Prueba manual de conversión
+libreoffice --headless --convert-to docx --outdir /tmp /ruta/archivo.doc
+```

@@ -1,0 +1,103 @@
+---
+title: "¿Qué es SIAA?"
+description: "Propósito, capacidades y limitaciones del Sistema Inteligente de Apoyo Administrativo"
+---
+
+# ¿Qué es SIAA?
+
+SIAA es un sistema de **preguntas y respuestas basado en RAG** (Retrieval-Augmented Generation) diseñado para el sector judicial. Combina recuperación de documentos con un modelo de lenguaje local para responder consultas sobre normativa judicial, procedimientos administrativos y el sistema de información SIERJU.
+
+## Componentes Principales
+
+**RAG con documentos institucionales**
+Respuestas contextualmente precisas basadas en los documentos cargados. No inventa información que no esté en los documentos.
+
+**Enrutador multi-nivel**
+TF-IDF + índice de densidad + coincidencia de nombre de archivo para seleccionar los documentos más relevantes entre los 59 disponibles.
+
+**Pipeline de conversión de documentos**
+Convierte automáticamente archivos Word, PDF y Excel a formato Markdown indexable.
+
+**Optimización de rendimiento**
+Caché LRU con TTL de 1 hora y precarga automática del modelo para respuestas más rápidas.
+
+**Monitoreo de calidad**
+Detección automática de posibles alucinaciones y registro JSONL de todas las consultas.
+
+---
+
+## ¿Qué puede hacer SIAA?
+
+<Check>Responder preguntas sobre acuerdos del Consejo Superior (PSAA, PCSJA)</Check>
+<Check>Guiar en el diligenciamiento del formulario SIERJU por tipo de juzgado</Check>
+<Check>Informar sobre plazos, periodicidad y requisitos de reporte</Check>
+<Check>Explicar roles y responsabilidades según la normativa</Check>
+<Check>Describir consecuencias y sanciones por incumplimiento</Check>
+<Check>Responder saludos y preguntas generales sobre el sistema</Check>
+<Check>Mantener conversaciones multi-turno con historial de contexto</Check>
+
+## ¿Qué NO puede hacer SIAA?
+
+<Warning>
+**SIAA tiene limitaciones importantes que debe conocer:**
+</Warning>
+
+<Cross>Acceder a internet o consultar bases de datos externas</Cross>
+<Cross>Responder sobre documentos que no han sido indexados en `/opt/siaa/fuentes/`</Cross>
+<Cross>Procesar consultas en tiempo real sobre expedientes judiciales específicos</Cross>
+<Cross>Reemplazar el criterio jurídico de un funcionario</Cross>
+<Cross>Garantizar que el modelo no cometa errores — siempre verifique información crítica</Cross>
+
+---
+
+## Arquitectura RAG en Detalle
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     CONSULTA DEL USUARIO                         │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                    ┌────────▼────────┐
+                    │  ¿Es saludo o   │
+                    │  conversación   │
+                    │   general?      │
+                    └────────┬────────┘
+                    SÍ ◄─────┴──────► NO
+                    │                 │
+           ┌────────▼──┐    ┌────────▼────────┐
+           │ SYSTEM_   │    │ ¿Está en caché? │
+           │CONVERSAC. │    └────────┬────────┘
+           └────────┬──┘    SÍ ◄────┴─────► NO
+                    │        │                │
+                    │   ┌────▼──────┐  ┌─────▼──────────┐
+                    │   │ Respuesta │  │ Enrutador RAG   │
+                    │   │ Instantá- │  │ (TF-IDF + dens) │
+                    │   │   nea     │  └─────┬───────────┘
+                    │   └───────────┘        │
+                    │                  ┌─────▼───────────┐
+                    │                  │ Extractor Chunks │
+                    │                  │ (ventana desliz) │
+                    │                  └─────┬───────────┘
+                    │                  ┌─────▼───────────┐
+                    │                  │   Ollama LLM    │
+                    │                  │  qwen2.5:3b     │
+                    │                  └─────┬───────────┘
+                    └──────────────────┬─────┘
+                                       │
+                              ┌────────▼────────┐
+                              │ Respuesta SSE   │
+                              │  (streaming)    │
+                              └─────────────────┘
+```
+
+---
+
+## Casos de Uso Típicos
+
+Los 26 despachos judiciales de la Seccional Bucaramanga utilizan SIAA principalmente para:
+
+- **Plazos de reporte SIERJU**: "¿Cuándo debo reportar?" → quinto día hábil del mes
+- **Roles y permisos**: "¿Puede un asistente cargar datos?" → Artículo 7 PSAA16
+- **Sanciones**: "¿Qué pasa si no reporto a tiempo?" → Artículos 19 y 20
+- **Procedimientos específicos por juzgado**: civil, penal, laboral, familia, administrativo
+- **Definición de términos**: "¿Qué es el SIERJU?" → objeto del Acuerdo PSAA16-10476

@@ -1,0 +1,29 @@
+---
+title: "GET /siaa/densidad/{termino}"
+description: "Ver la densidad de un término en todos los documentos del índice"
+---
+
+# GET /siaa/densidad/{termino}
+
+Muestra en qué documentos aparece un término y con qué densidad (frecuencia relativa).
+
+## Ejemplo
+
+```bash
+curl "http://localhost:5000/siaa/densidad/sierju"
+```
+
+## Respuesta
+
+```json
+{
+  "termino": "sierju",
+  "documentos": [
+    {"doc": "acuerdo_no._psaa16-10476.md", "densidad": 0.0142},
+    {"doc": "juzgado_civil_municipal.md",   "densidad": 0.0087},
+    {"doc": "juzgado_penal.md",             "densidad": 0.0043}
+  ]
+}
+```
+
+Útil para entender por qué el enrutador prioriza ciertos documentos para un término específico.

@@ -1,0 +1,34 @@
+---
+title: "GET /siaa/recargar"
+description: "Recargar el índice de documentos sin reiniciar el servidor"
+---
+
+# GET /siaa/recargar
+
+Recarga todos los documentos desde `/opt/siaa/fuentes/` y reconstruye el índice TF-IDF sin necesidad de reiniciar el servidor.
+
+## Cuándo usar
+
+- Después de convertir nuevos documentos
+- Después de modificar o eliminar archivos `.md`
+- Para refrescar las keywords de un documento actualizado
+
+## Ejemplo
+
+```bash
+curl http://localhost:5000/siaa/recargar
+```
+
+## Respuesta
+
+```json
+{
+  "status": "ok",
+  "total_docs": 59,
+  "colecciones": ["general", "normativa", "sierju"]
+}
+```
+
+<Note>
+La recarga toma 2–5 segundos. Durante ese tiempo las consultas pueden usar el índice anterior momentáneamente.
+</Note>

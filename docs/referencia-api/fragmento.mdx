@@ -1,0 +1,36 @@
+---
+title: "GET /siaa/fragmento"
+description: "Ver exactamente el fragmento que llegaría al modelo"
+---
+
+# GET /siaa/fragmento
+
+Muestra el fragmento exacto (chunks seleccionados) que se enviaría al modelo LLM para una combinación de documento + pregunta.
+
+## Parámetros
+
+| Parámetro | Tipo | Requerido | Descripción |
+|-----------|------|-----------|-------------|
+| `doc` | string | ✅ | Nombre del documento |
+| `q` | string | ✅ | Pregunta a evaluar |
+
+## Ejemplo
+
+```bash
+curl "http://localhost:5000/siaa/fragmento?doc=acuerdo_no._psaa16-10476.md&q=sanciones+incumplimiento"
+```
+
+## Respuesta
+
+```json
+{
+  "doc": "acuerdo_no._psaa16-10476.md",
+  "pregunta": "sanciones incumplimiento",
+  "modo": "FRANCOTIRADOR",
+  "chunks_seleccionados": 1,
+  "chars_totales": 812,
+  "fragmento": "[DOC: ACUERDO_NO._PSAA16-10476 | NORMATIVA]\n[SEC: ARTÍCULO 19 | CHUNK: 47]\nArtículo 19°. El incumplimiento de las obligaciones establecidas..."
+}
+```
+
+Este es el endpoint más útil para diagnosticar por qué el modelo respondió incorrectamente.

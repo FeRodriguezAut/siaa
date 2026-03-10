@@ -1,0 +1,169 @@
+---
+title: "Visión General de la Arquitectura"
+description: "Diseño arquitectónico completo del sistema SIAA"
+---
+
+# Visión General de la Arquitectura
+
+SIAA es un sistema de gestión de documentos judiciales con IA, construido para la Seccional Bucaramanga de la Rama Judicial de Colombia.
+
+---
+
+## Diagrama del Sistema
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        SERVIDOR HP EliteDesk 705 G4                  │
+│            Ryzen 5 PRO 2600 · 64GB RAM · Fedora 43                  │
+│                                                                       │
+│  ┌──────────────┐    ┌──────────────────────────────────────────┐   │
+│  │    Nginx     │    │            siaa_proxy.py                  │   │
+│  │   Puerto 80  │───▶│         Flask + Waitress :5000            │   │
+│  │  (frontend)  │    │                                           │   │
+│  └──────────────┘    │  ┌─────────────┐  ┌──────────────────┐  │   │
+│                       │  │  Caché LRU  │  │  Log Calidad     │  │   │
+│  ┌──────────────┐    │  │  200 entrad │  │  JSONL :5000     │  │   │
+│  │  index.html  │    │  │  TTL 1h     │  │                  │  │   │
+│  │  (frontend)  │    │  └─────────────┘  └──────────────────┘  │   │
+│  └──────────────┘    │                                           │   │
+│                       │  ┌─────────────────────────────────────┐ │   │
+│                       │  │         RAG Pipeline                 │ │   │
+│                       │  │  ┌──────────┐  ┌─────────────────┐ │ │   │
+│                       │  │  │Enrutador │  │  Extractor      │ │ │   │
+│                       │  │  │TF-IDF    │  │  Chunks         │ │ │   │
+│                       │  │  │59 docs   │  │  (ventana desliz│ │ │   │
+│                       │  │  └──────────┘  └─────────────────┘ │ │   │
+│                       │  └─────────────────────────────────────┘ │   │
+│                       └──────────────────────────────────────────┘   │
+│                                        │                              │
+│                       ┌────────────────▼──────────────────────────┐  │
+│                       │              Ollama :11434                  │  │
+│                       │         qwen2.5:3b (GGUF Q4_K_M)           │  │
+│                       │         ~1.8GB en RAM · CPU AVX2            │  │
+│                       └───────────────────────────────────────────┘  │
+│                                                                       │
+│  ┌──────────────────────────────────────────────────────────────────┐ │
+│  │                  Almacenamiento en Disco                          │ │
+│  │  /opt/siaa/fuentes/   · 59 archivos .md cargados en RAM         │ │
+│  │  /opt/siaa/logs/      · calidad.jsonl                            │ │
+│  │  /opt/siaa/instructivos/ · Word/Excel originales                │ │
+│  └──────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Componentes Principales
+
+### Flask Proxy (`siaa_proxy.py`)
+
+Orquestador central que maneja:
+
+- Clasificación de consultas (conversacional vs. documental)
+- Gestión del caché LRU
+- Coordinación del RAG pipeline
+- Comunicación con la API de Ollama
+- Registro de calidad (JSONL)
+- Servicio de endpoints de diagnóstico
+
+Corre sobre **Waitress WSGI** con 16 hilos para producción.
+
+### Ollama LLM Engine
+
+```python
+OLLAMA_URL = "http://localhost:11434"
+MODEL      = "qwen2.5:3b"
+
+options = {
+    "temperature":    0.0,   # Determinístico
+    "num_predict":    150,   # Máx tokens (300 para listados)
+    "num_ctx":        2048,  # Adaptativo: 1024 / 2048 / 3072
+    "num_thread":     6,     # Núcleos físicos (no SMT)
+    "num_batch":      512,   # Batch grande → menor TTFT
+    "repeat_penalty": 1.1,
+}
+```
+
+### Almacén de Documentos (en RAM)
+
+```python
+# Estructura por documento
+{
+    "ruta":           "/opt/siaa/fuentes/acuerdo_psaa16.md",
+    "contenido":      "...",           # Texto completo
+    "palabras":       set(),           # Vocabulario tokenizado
+    "tamano":         45231,           # Chars totales
+    "coleccion":      "normativa",     # general / normativa / sierju
+    "token_count":    Counter(),       # Frecuencia de términos
+    "total_tokens":   1542,
+    "tokens_nombre":  {"acuerdo", "psaa16"},
+    "num_chunks":     38,              # Chunks pre-calculados
+}
+```
+
+---
+
+## Flujo de Datos — De Consulta a Respuesta
+
+```
+1. Usuario envía consulta → POST /siaa/chat
+
+2. ¿Es conversación? → SYSTEM_CONVERSACIONAL → Ollama → SSE
+
+3. ¿Está en caché? → SSE simulado (~5ms)
+
+4. RAG Pipeline:
+   a. detectar_documentos()   → TF-IDF + densidad + nombre
+   b. extraer_fragmento()     → chunks + puntuación + frases exactas
+   c. cache_get()             → verificar antes de llamar al LLM
+   d. llamar_ollama()         → SYSTEM_DOCUMENTAL + contexto
+   e. cache_set()             → guardar si es respuesta válida
+   f. registrar_consulta()    → JSONL con métricas y alertas
+   g. SSE chunks              → respuesta al frontend
+```
+
+---
+
+## Límite de Concurrencia
+
+```python
+MAX_OLLAMA_SIMULTANEOS = 2   # Semáforo de solicitudes paralelas
+```
+
+**¿Por qué solo 2?**
+1. qwen2.5:3b requiere ~4GB de RAM efectiva durante inferencia
+2. El Ryzen 5 2600 (6 núcleos) entra en thrashing con >2 inferencias paralelas
+3. La calidad de respuesta baja con más concurrencia (más lento por token)
+
+La tercera consulta espera hasta 30 segundos. Si el semáforo no se libera, el usuario recibe "Sistema ocupado".
+
+---
+
+## Referencia de Configuración Completa
+
+| Parámetro | Valor | Propósito |
+|-----------|-------|-----------|
+| `MAX_OLLAMA_SIMULTANEOS` | 2 | Consultas paralelas |
+| `HILOS_SERVIDOR` | 16 | Hilos Waitress |
+| `TIMEOUT_CONEXION` | 8s | Conexión a Ollama |
+| `TIMEOUT_RESPUESTA` | 180s | Tiempo máx de respuesta |
+| `CHUNK_SIZE` | 800 | Chars por chunk |
+| `CHUNK_OVERLAP` | 300 | Solapamiento entre chunks |
+| `MAX_CHUNKS_CONTEXTO` | 3 | Chunks máx por doc |
+| `MAX_DOCS_CONTEXTO` | 2 | Documentos por consulta |
+| `CACHE_MAX_ENTRADAS` | 200 | Capacidad del caché |
+| `CACHE_TTL_SEGUNDOS` | 3600 | Vigencia por entrada |
+| `LOG_MAX_LINEAS` | 5000 | Rotación del log |
+
+---
+
+## Características de Rendimiento
+
+| Métrica | Valor |
+|---------|-------|
+| Respuesta desde caché | ~5ms |
+| Respuesta nueva (doc) | 20–45s |
+| Tiempo al primer token (TTFT) | 3–8s |
+| Generación de tokens | ~15–20 tok/s |
+| Concurrencia máxima | 2 usuarios |
+| Hit rate estimado (26 despachos) | 30–40% |

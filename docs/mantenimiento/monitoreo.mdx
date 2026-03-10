@@ -1,0 +1,104 @@
+---
+title: "Monitoreo del Sistema"
+description: "Logs, scripts de cron e indicadores de salud del sistema SIAA"
+---
+
+# Monitoreo del Sistema
+
+---
+
+## Comandos de Monitoreo Diario
+
+```bash
+# Estado general
+curl -s http://localhost:5000/siaa/estado | python3 -m json.tool
+
+# Resumen de las últimas 100 consultas
+curl -s "http://localhost:5000/siaa/log?n=100" | python3 -m json.tool | grep -E "total|errores|alucinaciones|hit_rate|tiempo"
+
+# Posibles alucinaciones del día
+curl -s "http://localhost:5000/siaa/log?alerta=POSIBLE_ALUCINACION&n=50&formato=txt"
+
+# Hit rate del caché
+curl -s http://localhost:5000/siaa/cache | python3 -m json.tool
+```
+
+---
+
+## Script de Monitoreo Automático
+
+```bash
+# /opt/siaa/monitor.sh
+#!/bin/bash
+
+FECHA=$(date +"%Y-%m-%d %H:%M:%S")
+LOG="/opt/siaa/logs/monitor.log"
+
+# Verificar que el proxy está vivo
+STATUS=$(curl -s --max-time 5 http://localhost:5000/siaa/estado 2>/dev/null)
+if [ -z "$STATUS" ]; then
+    echo "[$FECHA] ❌ PROXY CAÍDO — reiniciando..." >> $LOG
+    sudo systemctl restart siaa
+    exit 1
+fi
+
+# Verificar Ollama
+OLLAMA=$(echo $STATUS | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('ollama_disponible','?'))")
+echo "[$FECHA] Ollama: $OLLAMA" >> $LOG
+
+# Hit rate del caché
+HITRATE=$(curl -s http://localhost:5000/siaa/cache | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('hit_rate','?'))")
+echo "[$FECHA] Cache hit rate: $HITRATE" >> $LOG
+
+echo "[$FECHA] ✅ Sistema OK" >> $LOG
+```
+
+```bash
+# Hacer ejecutable y agregar al cron (cada 5 minutos)
+chmod +x /opt/siaa/monitor.sh
+crontab -e
+# Agregar:
+# */5 * * * * /opt/siaa/monitor.sh
+```
+
+---
+
+## Indicadores de Salud
+
+| Indicador | Saludable | Alarma |
+|-----------|-----------|--------|
+| `ollama_disponible` | `true` | `false` → reiniciar Ollama |
+| `usuarios_activos` | 0–2 | >2 → consultas bloqueadas |
+| `cache.hit_rate` | >30% | <15% → revisar TTL |
+| `posibles_alucinaciones` | <5% del total | >10% → revisar prompts y chunks |
+| `tiempo_promedio_s` | <30s | >45s → revisar CPU governor |
+| Espacio en disco `/opt/siaa` | >500MB libre | <100MB → limpiar logs viejos |
+
+---
+
+## Monitoreo Continuo
+
+```bash
+# Estado en tiempo real (actualiza cada 5 segundos)
+watch -n 5 'curl -s http://localhost:5000/siaa/estado | python3 -m json.tool'
+
+# Log del servicio en tiempo real
+sudo journalctl -u siaa -f
+
+# Uso de CPU y RAM
+htop
+
+# Temperatura del procesador (importante para inferencia prolongada)
+sudo dnf install lm_sensors -y && sensors
+```
+
+---
+
+## Rotación y Archivo de Logs
+
+```bash
+# Cron diario a las 2:00 AM
+0 2 * * * cp /opt/siaa/logs/calidad.jsonl /opt/siaa/archive/calidad-$(date +\%Y\%m\%d).jsonl
+0 2 * * * find /opt/siaa/archive -name '*.jsonl' -mtime +7 -exec gzip {} \;
+0 3 * * * find /opt/siaa/archive -name '*.jsonl.gz' -mtime +90 -delete
+```

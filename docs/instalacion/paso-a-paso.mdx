@@ -1,0 +1,127 @@
+---
+title: "Instalación Paso a Paso"
+description: "Guía completa de instalación de SIAA en 8 pasos"
+---
+
+# Instalación Paso a Paso
+
+<Steps>
+  <Step title="Instalar dependencias del sistema">
+    ```bash
+    sudo dnf install libreoffice-headless tesseract tesseract-langpack-spa poppler-utils -y
+    ```
+    LibreOffice headless es necesario para convertir `.doc` y `.pdf` a `.docx`.
+  </Step>
+
+  <Step title="Instalar dependencias Python">
+    ```bash
+    pip install flask flask-cors waitress requests \
+                python-docx pandas openpyxl xlrd \
+                pymupdf4llm pdf2image pytesseract \
+                --break-system-packages
+    ```
+  </Step>
+
+  <Step title="Instalar Ollama y el modelo">
+    ```bash
+    curl -fsSL https://ollama.ai/install.sh | sh
+    ollama pull qwen2.5:3b
+    ollama list   # verificar que aparece qwen2.5:3b
+    ```
+  </Step>
+
+  <Step title="Clonar el repositorio y crear estructura de directorios">
+    ```bash
+    git clone https://github.com/FeRodriguezAut/siaa.git /opt/siaa
+    
+    sudo mkdir -p /opt/siaa/fuentes/normativa
+    sudo mkdir -p /opt/siaa/fuentes/sierju
+    sudo mkdir -p /opt/siaa/logs
+    sudo mkdir -p /opt/siaa/instructivos
+    sudo mkdir -p /opt/siaa/pdfs_origen
+    
+    sudo chown -R $USER:$USER /opt/siaa
+    ```
+
+    | Directorio | Propósito |
+    |-----------|-----------|
+    | `/opt/siaa/fuentes/` | Documentos Markdown indexados |
+    | `/opt/siaa/fuentes/normativa/` | Acuerdos y normas (PSAA, PCSJA) |
+    | `/opt/siaa/fuentes/sierju/` | Manuales por tipo de juzgado |
+    | `/opt/siaa/logs/` | Logs de calidad (JSONL) |
+    | `/opt/siaa/instructivos/` | Archivos Word/Excel originales |
+    | `/opt/siaa/pdfs_origen/` | PDFs para convertir |
+  </Step>
+
+  <Step title="Configurar variables de entorno (opcional)">
+    ```bash
+    export SIAA_SERVER_IP="192.168.1.100"
+    export SIAA_SERVER_PORT="5000"
+    
+    # Para hacerlas permanentes:
+    echo 'export SIAA_SERVER_IP="192.168.1.100"' >> ~/.bashrc
+    echo 'export SIAA_SERVER_PORT="5000"' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+    Si no se configuran, el sistema usa la IP del encabezado HTTP `Host` y el puerto 5000.
+  </Step>
+
+  <Step title="Agregar documentos al sistema">
+    ```bash
+    # Documentos Word/Excel: una subcarpeta por juzgado
+    mkdir -p /opt/siaa/instructivos/"Juzgado Civil Municipal"
+    cp manual_civil_municipal.docx datos_estadisticos.xlsx \
+       /opt/siaa/instructivos/"Juzgado Civil Municipal"/
+    
+    # PDFs (acuerdos normativos)
+    cp acuerdo_psaa16-10476.pdf /opt/siaa/pdfs_origen/
+    ```
+  </Step>
+
+  <Step title="Convertir documentos a Markdown">
+    ```bash
+    cd /opt/siaa
+    
+    # Word/Excel → Markdown + SQLite
+    python3 convertidor.py
+    
+    # PDFs → Markdown (con OCR automático si es necesario)
+    python3 convertidor_pdf.py
+    ```
+    Después de la conversión, los `.md` quedan en `/opt/siaa/fuentes/`.
+  </Step>
+
+  <Step title="Iniciar SIAA y verificar">
+    ```bash
+    cd /opt/siaa
+    python3 siaa_proxy.py
+    
+    # En otra terminal, verificar estado:
+    curl http://localhost:5000/siaa/estado
+    ```
+    
+    Si `documentos_cargados > 0` y `ollama_disponible: true`, el sistema está listo.
+    
+    Abra el navegador en `http://localhost` (si Nginx está configurado) o `http://localhost:5000`.
+  </Step>
+</Steps>
+
+---
+
+## Estructura Final del Proyecto
+
+```
+/opt/siaa/
+├── siaa_proxy.py        # Servidor principal (Flask + RAG)
+├── convertidor.py       # Word/Excel → Markdown + SQLite
+├── convertidor_pdf.py   # PDF → Markdown (pymupdf4llm + OCR)
+├── index.html           # Frontend web
+├── fuentes/             # Documentos .md indexados
+│   ├── *.md             # Colección general
+│   ├── normativa/       # Acuerdos PSAA, PCSJA
+│   └── sierju/          # Manuales por tipo de juzgado
+├── instructivos/        # Documentos Word/Excel originales
+├── pdfs_origen/         # PDFs para convertir
+└── logs/
+    └── calidad.jsonl    # Log de calidad (JSONL)
+```

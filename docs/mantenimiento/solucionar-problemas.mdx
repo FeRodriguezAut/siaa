@@ -1,0 +1,167 @@
+---
+title: "Solución de Problemas"
+description: "7 problemas frecuentes con diagnóstico y solución paso a paso"
+---
+
+# Solución de Problemas
+
+---
+
+## 1. "No encontré esa información" — pero el documento sí tiene la respuesta
+
+**Diagnóstico sistemático:**
+
+```bash
+# Paso 1: ¿El enrutador detectó el documento correcto?
+curl "http://localhost:5000/siaa/enrutar?q=su+pregunta+aqui"
+```
+
+Si el documento correcto **no aparece** → problema en el enrutador:
+```bash
+# Ver qué keywords tiene el documento
+curl "http://localhost:5000/siaa/keywords/nombre_doc.md"
+# Solución: agregar keywords manuales en siaa_proxy.py (KEYWORDS_MANUALES)
+```
+
+Si el documento correcto **sí aparece** → problema en el extractor:
+```bash
+# Paso 2: ¿El fragmento contiene la respuesta?
+curl "http://localhost:5000/siaa/fragmento?doc=nombre_doc.md&q=su+pregunta"
+```
+
+Si el fragmento no contiene la respuesta → el chunk seleccionado es incorrecto:
+- Verificar que las palabras clave de la pregunta coincidan con el texto del documento
+- Considerar aumentar `MAX_CHUNKS_CONTEXTO` de 3 a 4
+- Revisar el system prompt `SYSTEM_DOCUMENTAL` — puede ser demasiado restrictivo
+
+---
+
+## 2. El sistema responde a saludos con "No encontré..."
+
+**Causa:** La pregunta contiene un término técnico que `TERMINOS_SIEMPRE_DOCUMENTAL` marca como documental, o hay un bug en `es_conversacion_general()`.
+
+**Diagnóstico:**
+
+```bash
+# Ver el log de la consulta fallida
+curl "http://localhost:5000/siaa/log?n=5&formato=txt"
+# Verificar si tipo=CONV o tipo=DOC
+```
+
+**Solución:** En `siaa_proxy.py`, verificar `PATRONES_CONVERSACION` y asegurarse de que el saludo está en la lista. Si la consulta fue clasificada como `DOC` siendo un saludo, el `SYSTEM_CONVERSACIONAL` debería manejarla.
+
+---
+
+## 3. Las respuestas tardan más de 45 segundos
+
+```bash
+# Verificar si el modelo está en RAM
+curl http://localhost:11434/api/ps
+
+# Si no está cargado, hacer warm-up manual
+curl -X POST http://localhost:11434/api/generate \
+  -d '{"model":"qwen2.5:3b","prompt":"hola","stream":false}'
+
+# Verificar carga del sistema
+htop   # ¿otro proceso compite con CPU?
+
+# Verificar CPU governor
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+# Debe decir "performance", no "powersave"
+
+# Activar performance governor
+echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+```
+
+**Causa más común:** El modelo se descargó de RAM por inactividad. Configure `OLLAMA_KEEP_ALIVE=-1` en el servicio systemd de Ollama.
+
+---
+
+## 4. Las respuestas se cortan antes de completar la información
+
+**Causa:** La pregunta activa `es_pregunta_listado()` pero el threshold no se cumplió → `num_predict` queda en 150 en lugar de 300.
+
+**Verificar:**
+```bash
+curl "http://localhost:5000/siaa/log?n=5" | grep num_predict
+```
+
+**Solución temporal:** Reformule la pregunta con palabras de listado: "¿Cuáles son los...?", "Enumere los...", "¿Qué campos tiene...?"
+
+---
+
+## 5. El proxy se bloquea con varios usuarios simultáneos
+
+```bash
+# Ver usuarios activos
+curl http://localhost:5000/siaa/estado | grep usuarios_activos
+
+# Si hay 2 usuarios activos, la 3ª consulta espera hasta 30s
+# Si el semáforo no se libera → error "Sistema ocupado"
+```
+
+**Solución:** Verificar que no haya consultas colgadas en Ollama:
+```bash
+curl http://localhost:11434/api/ps
+# Si hay consultas activas colgadas, reiniciar Ollama:
+sudo systemctl restart ollama
+```
+
+---
+
+## 6. Documentos no indexados después de agregar archivos
+
+```bash
+# Verificar que el .md existe en fuentes/
+ls -la /opt/siaa/fuentes/
+
+# Recargar el índice
+curl http://localhost:5000/siaa/recargar
+
+# Verificar que quedó cargado
+curl http://localhost:5000/siaa/estado | grep documentos_cargados
+
+# Si el documento no aparece, verificar errores de conversión
+cat /opt/siaa/logs/conversion_errores.log
+```
+
+---
+
+## 7. Errores de permisos al iniciar SIAA
+
+```bash
+# Verificar propietario de /opt/siaa
+ls -la /opt/siaa
+
+# Corregir permisos
+sudo chown -R siaa:siaa /opt/siaa
+sudo chmod -R 755 /opt/siaa
+sudo chmod 644 /opt/siaa/logs/calidad.jsonl
+
+# Si el log no existe
+sudo -u siaa mkdir -p /opt/siaa/logs
+sudo -u siaa touch /opt/siaa/logs/calidad.jsonl
+```
+
+---
+
+## Comandos de Diagnóstico Rápido
+
+```bash
+# Estado completo del sistema
+curl http://localhost:5000/siaa/estado | python3 -m json.tool
+
+# Últimas 10 consultas con alertas
+curl "http://localhost:5000/siaa/log?n=10&formato=txt"
+
+# Verificar Ollama
+curl http://localhost:11434/api/tags
+
+# Logs del servicio systemd
+sudo journalctl -u siaa -n 50 --no-pager
+sudo journalctl -u ollama -n 20 --no-pager
+
+# Uso de RAM (el modelo debe estar en RAM)
+free -h
+# qwen2.5:3b ocupa ~1.8GB; con 64GB sobra espacio
+```

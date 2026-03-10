@@ -1,0 +1,50 @@
+---
+title: "Monitoreo del Sistema"
+description: "Endpoints de monitoreo, indicadores clave y alertas automáticas"
+---
+
+# Monitoreo del Sistema
+
+---
+
+## Endpoint de Estado
+
+```bash
+curl http://localhost:5000/siaa/estado
+```
+
+**Campos clave:**
+
+| Campo | Descripción |
+|-------|-------------|
+| `ollama_disponible` | Si Ollama está respondiendo |
+| `warmup_completado` | Si el modelo ya está en RAM |
+| `usuarios_activos` | Consultas en progreso (máx 2) |
+| `documentos_cargados` | Documentos indexados |
+| `cache.hit_rate` | Porcentaje de consultas desde caché |
+
+---
+
+## Indicadores de Salud
+
+| Indicador | Saludable | Alarma | Acción |
+|-----------|-----------|--------|--------|
+| `ollama_disponible` | `true` | `false` | `sudo systemctl restart ollama` |
+| `usuarios_activos` | 0–2 | >2 persistente | Verificar consultas colgadas |
+| `cache.hit_rate` | >30% | <15% | Revisar TTL o tamaño del caché |
+| `tiempo_promedio_s` | <30s | >45s | Revisar CPU governor |
+
+---
+
+## Logs del Servicio systemd
+
+```bash
+# En tiempo real
+sudo journalctl -u siaa -f
+
+# Últimas 100 líneas
+sudo journalctl -u siaa -n 100
+
+# Solo errores
+sudo journalctl -u siaa -p err
+```

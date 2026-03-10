@@ -1,0 +1,183 @@
+---
+title: "Servicio systemd"
+description: "Configurar SIAA como servicio permanente con inicio automático"
+---
+
+# Configurar SIAA como Servicio systemd
+
+Para que SIAA inicie automáticamente al arrancar el servidor y se reinicie si falla, configúrelo como servicio systemd.
+
+---
+
+## Paso 1 — Servicio Ollama
+
+Ollama normalmente instala su propio servicio. Verifíquelo:
+
+```bash
+systemctl status ollama
+```
+
+Si no existe, créelo:
+
+```bash
+sudo tee /etc/systemd/system/ollama.service << 'EOF'
+[Unit]
+Description=Ollama LLM Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/ollama serve
+Restart=always
+RestartSec=3
+Environment="OLLAMA_KEEP_ALIVE=-1"
+Environment="OLLAMA_NUM_PARALLEL=2"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+<Tip>
+`OLLAMA_KEEP_ALIVE=-1` mantiene el modelo en RAM indefinidamente. Esto elimina el costo de carga en cada consulta.
+</Tip>
+
+---
+
+## Paso 2 — Servicio SIAA
+
+```bash
+sudo tee /etc/systemd/system/siaa.service << 'EOF'
+[Unit]
+Description=SIAA — Sistema Inteligente de Apoyo Administrativo
+After=network.target ollama.service
+Requires=ollama.service
+
+[Service]
+Type=simple
+User=siaa
+Group=siaa
+WorkingDirectory=/opt/siaa
+ExecStart=/usr/bin/python3 /opt/siaa/siaa_proxy.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=siaa
+
+# Límites para 64GB RAM
+LimitNOFILE=65536
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+---
+
+## Paso 3 — Crear Usuario del Servicio
+
+```bash
+sudo useradd -r -s /sbin/nologin siaa
+sudo chown -R siaa:siaa /opt/siaa
+```
+
+---
+
+## Paso 4 — Activar e Iniciar
+
+```bash
+sudo systemctl daemon-reload
+
+# Activar inicio automático
+sudo systemctl enable ollama
+sudo systemctl enable siaa
+
+# Iniciar ahora
+sudo systemctl start ollama
+sleep 5   # Esperar a que Ollama esté listo
+sudo systemctl start siaa
+
+# Verificar
+sudo systemctl status siaa
+```
+
+---
+
+## Comandos de Gestión
+
+```bash
+# Ver estado
+sudo systemctl status siaa
+
+# Ver logs en tiempo real
+sudo journalctl -u siaa -f
+
+# Ver últimas 100 líneas de log
+sudo journalctl -u siaa -n 100
+
+# Reiniciar el servicio (p.ej., después de actualizar el código)
+sudo systemctl restart siaa
+
+# Detener
+sudo systemctl stop siaa
+```
+
+---
+
+## Configuración Nginx (Proxy Reverso)
+
+```nginx
+# /etc/nginx/conf.d/siaa.conf
+server {
+    listen 80;
+    server_name _;
+
+    # Frontend estático
+    location / {
+        root /opt/siaa;
+        index index.html;
+        try_files $uri $uri/ =404;
+    }
+
+    # Proxy al Flask/Waitress
+    location /siaa/ {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        
+        # Importante para SSE (streaming)
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300;
+        chunked_transfer_encoding on;
+    }
+}
+```
+
+```bash
+sudo systemctl enable nginx
+sudo systemctl start nginx
+sudo nginx -t   # Verificar configuración
+```
+
+---
+
+## Orden de Arranque del Sistema
+
+```
+Sistema operativo
+      ↓
+network.target
+      ↓
+ollama.service     (precarga qwen2.5:3b en RAM)
+      ↓
+siaa.service       (carga 59 docs, construye índice TF-IDF)
+      ↓
+nginx              (sirve frontend en :80, proxy a :5000)
+```
+
+El tiempo total desde arranque hasta SIAA disponible es aproximadamente **60-90 segundos** (la mayor parte es la carga del modelo por Ollama).

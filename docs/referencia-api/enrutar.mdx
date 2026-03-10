@@ -1,0 +1,38 @@
+---
+title: "GET /siaa/enrutar"
+description: "Diagnóstico del enrutador de documentos"
+---
+
+# GET /siaa/enrutar
+
+Muestra qué documentos seleccionaría el enrutador para una pregunta dada, sin ejecutar la inferencia.
+
+## Parámetros
+
+| Parámetro | Tipo | Requerido | Descripción |
+|-----------|------|-----------|-------------|
+| `q` | string | ✅ | Pregunta a evaluar |
+
+## Ejemplo
+
+```bash
+curl "http://localhost:5000/siaa/enrutar?q=consecuencias+por+no+reportar+sierju"
+```
+
+## Respuesta
+
+```json
+{
+  "pregunta": "consecuencias por no reportar sierju",
+  "doc_especifico": false,
+  "max_docs_usados": 2,
+  "docs_encontrados": [
+    {
+      "doc": "acuerdo_no._psaa16-10476.md",
+      "tamano": 158432,
+      "coleccion": "normativa",
+      "chunks": 198
+    }
+  ]
+}
+```

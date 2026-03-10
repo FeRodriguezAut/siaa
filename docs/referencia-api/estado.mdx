@@ -1,0 +1,52 @@
+---
+title: "GET /siaa/estado"
+description: "Estado del sistema y métricas de salud"
+---
+
+# GET /siaa/estado
+
+Devuelve el estado completo del sistema, incluyendo disponibilidad de Ollama, documentos cargados y estadísticas del caché.
+
+## Endpoint
+
+```
+GET /siaa/estado
+```
+
+## Ejemplo
+
+```bash
+curl http://localhost:5000/siaa/estado
+```
+
+## Respuesta
+
+```json
+{
+  "status": "ok",
+  "version": "2.1.27",
+  "model": "qwen2.5:3b",
+  "ollama_disponible": true,
+  "warmup_completado": true,
+  "usuarios_activos": 0,
+  "documentos_cargados": 59,
+  "colecciones": {
+    "general": 22,
+    "normativa": 15,
+    "sierju": 22
+  },
+  "cache": {
+    "entradas": 47,
+    "max": 200,
+    "hits": 152,
+    "misses": 89,
+    "hit_rate": "63.1%",
+    "ttl_seg": 3600
+  },
+  "ollama": {
+    "disponible": true,
+    "ultimo_check": 1709856234.5,
+    "fallos": 0
+  }
+}
+```

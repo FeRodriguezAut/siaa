@@ -1,0 +1,232 @@
+---
+title: "Endpoints de Diagnóstico"
+description: "Herramientas para depurar el enrutador, chunks y keywords"
+---
+
+# Endpoints de Diagnóstico
+
+Estos endpoints permiten inspeccionar el comportamiento interno del sistema RAG sin modificar nada.
+
+---
+
+## GET /siaa/enrutar
+
+Muestra qué documentos seleccionaría el enrutador para una pregunta dada.
+
+```bash
+curl "http://localhost:5000/siaa/enrutar?q=consecuencias+por+no+reportar+sierju"
+```
+
+```json
+{
+  "pregunta": "consecuencias por no reportar sierju",
+  "doc_especifico": false,
+  "max_docs_usados": 2,
+  "docs_encontrados": [
+    {
+      "doc": "acuerdo_no._psaa16-10476.md",
+      "tamano": 158432,
+      "coleccion": "normativa",
+      "chunks": 198
+    }
+  ]
+}
+```
+
+---
+
+## GET /siaa/fragmento
+
+Muestra exactamente el fragmento que llegaría al modelo para una consulta específica.
+
+```bash
+curl "http://localhost:5000/siaa/fragmento?doc=acuerdo_no._psaa16-10476.md&q=sanciones+incumplimiento"
+```
+
+```json
+{
+  "doc": "acuerdo_no._psaa16-10476.md",
+  "pregunta": "sanciones incumplimiento",
+  "modo": "FRANCOTIRADOR",
+  "chunks_seleccionados": 1,
+  "chars_totales": 812,
+  "fragmento": "[DOC: ACUERDO_NO._PSAA16-10476 | NORMATIVA]\n[SEC: ARTÍCULO 19 | CHUNK: 47]\nArtículo 19°. El incumplimiento..."
+}
+```
+
+<Tip>
+Si el fragmento no contiene la respuesta esperada, use este endpoint para diagnosticar si el problema está en el **enrutador** (no detectó el documento) o en el **extractor** (detectó el documento pero eligió el chunk incorrecto).
+</Tip>
+
+---
+
+## GET /siaa/keywords/\{nombre_doc\}
+
+Muestra las keywords TF-IDF calculadas automáticamente para un documento.
+
+```bash
+curl "http://localhost:5000/siaa/keywords/acuerdo_no._psaa16-10476.md"
+```
+
+```json
+{
+  "doc": "acuerdo_no._psaa16-10476.md",
+  "keywords": ["sierju", "reporte", "habiles", "formulario", "periodicidad",
+               "inventario", "psaa16", "despacho", "magistrado", "discrepancia"]
+}
+```
+
+---
+
+## GET /siaa/densidad/\{termino\}
+
+Muestra la densidad de un término en todos los documentos del índice.
+
+```bash
+curl "http://localhost:5000/siaa/densidad/sierju"
+```
+
+```json
+{
+  "termino": "sierju",
+  "documentos": [
+    {"doc": "acuerdo_no._psaa16-10476.md", "densidad": 0.0142},
+    {"doc": "juzgado_civil_municipal.md",   "densidad": 0.0087}
+  ]
+}
+```
+
+---
+
+## GET /siaa/debug_tokens
+
+Diagnóstico completo de tokenización de una consulta (disponible desde v2.1.26).
+
+```bash
+curl "http://localhost:5000/siaa/debug_tokens?q=inventario+final+sierju"
+```
+
+```json
+{
+  "pregunta_original": "inventario final sierju",
+  "tokens": ["inventario", "final", "sierju"],
+  "tokens_con_match": {
+    "sierju": ["acuerdo_no._psaa16-10476.md"],
+    "inventario": ["acuerdo_no._psaa16-10476.md", "juzgado_civil_municipal.md"]
+  },
+  "tokens_sin_match": ["final"],
+  "docs_candidatos": ["acuerdo_no._psaa16-10476.md"]
+}
+```
+
+---
+
+## GET /siaa/recargar
+
+Recarga todos los documentos desde disco y reconstruye el índice, sin reiniciar el servidor.
+
+```bash
+curl http://localhost:5000/siaa/recargar
+```
+
+```json
+{
+  "status": "ok",
+  "total_docs": 59,
+  "colecciones": ["general", "normativa", "sierju"]
+}
+```
+
+<Note>
+Use este endpoint después de agregar, modificar o eliminar documentos en `/opt/siaa/fuentes/`.
+</Note>
+
+---
+
+## GET /siaa/cache — Estadísticas
+
+```bash
+curl http://localhost:5000/siaa/cache
+```
+
+```json
+{
+  "entradas": 47,
+  "max": 200,
+  "hits": 152,
+  "misses": 89,
+  "hit_rate": "63.1%",
+  "ttl_seg": 3600
+}
+```
+
+## DELETE /siaa/cache — Limpiar
+
+```bash
+curl -X DELETE http://localhost:5000/siaa/cache
+```
+
+```json
+{
+  "vaciado": true,
+  "mensaje": "Caché limpiado correctamente"
+}
+```
+
+---
+
+## GET /siaa/log
+
+```bash
+# Últimas 50 consultas (JSON)
+curl "http://localhost:5000/siaa/log?n=50"
+
+# Formato texto para terminal
+curl "http://localhost:5000/siaa/log?n=20&formato=txt"
+
+# Solo alucinaciones
+curl "http://localhost:5000/siaa/log?alerta=POSIBLE_ALUCINACION"
+
+# Solo errores
+curl "http://localhost:5000/siaa/log?alerta=ERROR"
+```
+
+### Parámetros
+
+| Parámetro | Tipo | Defecto | Descripción |
+|-----------|------|---------|-------------|
+| `n` | int | 50 | Número de entradas (máx 500) |
+| `tipo` | string | — | Filtrar: `CONV`, `DOC`, `CACHE_HIT`, `ERROR` |
+| `alerta` | string | — | Filtrar: `OK`, `SIN_CONTEXTO`, `POSIBLE_ALUCINACION`, `ERROR` |
+| `formato` | string | `json` | `json` o `txt` |
+
+---
+
+## GET /siaa/ver/\{nombre_doc\}
+
+Muestra el contenido completo de un documento en formato HTML.
+
+```bash
+curl "http://localhost:5000/siaa/ver/acuerdo_no._psaa16-10476.md"
+```
+
+Devuelve el Markdown convertido a HTML, útil para verificar que el documento fue convertido correctamente.
+
+---
+
+## Tabla Resumen de Endpoints
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/siaa/chat` | POST | Consulta principal (SSE streaming) |
+| `/siaa/estado` | GET | Estado y métricas del sistema |
+| `/siaa/recargar` | GET | Recargar índice de documentos |
+| `/siaa/cache` | GET | Estadísticas del caché |
+| `/siaa/cache` | DELETE | Limpiar caché |
+| `/siaa/log` | GET | Log de calidad JSONL |
+| `/siaa/enrutar?q=` | GET | Diagnóstico del enrutador |
+| `/siaa/fragmento?doc=&q=` | GET | Fragmento que llega al modelo |
+| `/siaa/keywords/{doc}` | GET | Keywords TF-IDF de un documento |
+| `/siaa/densidad/{termino}` | GET | Densidad de término en el índice |
+| `/siaa/debug_tokens?q=` | GET | Diagnóstico de tokenización |
+| `/siaa/ver/{doc}` | GET | Contenido del documento en HTML |

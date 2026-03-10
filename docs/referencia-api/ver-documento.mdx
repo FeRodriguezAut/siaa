@@ -1,0 +1,20 @@
+---
+title: "GET /siaa/ver/{nombre_doc}"
+description: "Ver el contenido completo de un documento en HTML"
+---
+
+# GET /siaa/ver/{nombre_doc}
+
+Devuelve el contenido Markdown de un documento convertido a HTML para visualización.
+
+## Ejemplo
+
+```bash
+# En navegador:
+http://localhost:5000/siaa/ver/acuerdo_no._psaa16-10476.md
+
+# Vía curl:
+curl "http://localhost:5000/siaa/ver/acuerdo_no._psaa16-10476.md"
+```
+
+Útil para verificar que la conversión del documento fue correcta y que el contenido es legible por el sistema RAG.

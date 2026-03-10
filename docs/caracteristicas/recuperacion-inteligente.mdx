@@ -1,0 +1,184 @@
+---
+title: "Recuperación Inteligente de Documentos"
+description: "Sistema multi-nivel con TF-IDF, índice de densidad y puntuación semántica para selección precisa de documentos"
+---
+
+# Recuperación Inteligente de Documentos
+
+SIAA usa un sistema de recuperación multi-nivel para encontrar los documentos más relevantes a cada consulta. El sistema combina TF-IDF, índice de densidad, coincidencia de nombre de archivo y selección avanzada de chunks.
+
+---
+
+## Fase 1 — Enrutador de Documentos
+
+El enrutador decide **qué documentos** consultar entre los 59 disponibles.
+
+### Nivel 0 — Documento Específico
+
+Si la pregunta menciona literalmente un código de documento (ej. "acuerdo psaa16"), el sistema busca **solo ese documento**, ignorando los demás para evitar ruido.
+
+```python
+PATRON_DOC_ESPECIFICO = re.compile(
+    r'\b(psaa|pcsja|acuerdo|circular|resolución|decreto)\s*[\w\-\.]+',
+    re.IGNORECASE
+)
+```
+
+### Nivel 1 — TF-IDF Automático + Keywords Manuales
+
+Combina keywords generadas automáticamente con términos manuales de alta prioridad.
+
+**Keywords automáticas** — generadas al cargar los documentos:
+
+```python
+# tf × idf por término, top-20 por documento
+tf  = freq / total_tokens
+idf = log((N + 1) / (df[termino] + 1)) + 1
+score = tf * idf
+```
+
+**Keywords manuales** — peso ×2 respecto a las automáticas:
+
+```python
+KEYWORDS_MANUALES = {
+    "acuerdo_no._psaa16-10476.md": [
+        "que es sierju", "para que sirve", "objeto",
+        "periodicidad", "reportar", "quinto dia habil",
+        "roles", "super administrador", "funcionario",
+        "sancion", "incumplimiento", "no reporto", "consecuencia",
+    ],
+    "acuerdo_pcsja19-11207..md": [
+        "capacitacion", "quien capacita", "cendoj", "udae",
+    ],
+}
+```
+
+<Tip>
+Agregue keywords manuales cuando el enrutador no detecte correctamente un documento para preguntas típicas. Son la forma más rápida de mejorar la precisión.
+</Tip>
+
+### Nivel 2 — Índice de Densidad
+
+Mide la densidad de cada término de la pregunta en el documento completo.
+
+```python
+# densidad = frecuencia_término / total_tokens_documento
+nuevo_indice[termino].append((freq / total, nombre_doc))
+```
+
+Ejemplo: "psaa16" aparece 15 veces en un documento de 500 tokens → densidad = 0.03
+
+### Nivel 3 — Coincidencia por Nombre de Archivo
+
+```python
+# "acuerdo_no._psaa16-10476.md" → tokens: {"acuerdo", "psaa16", "10476"}
+def _tokens_nombre_archivo(nombre_clave: str) -> set:
+    partes = re.split(r'[_\s\-\.]+', sin_ext.lower())
+    return {p for p in partes if len(p) >= 3}
+```
+
+### Puntuación Combinada
+
+```python
+score_final = TF-IDF × 2.0 + densidad × 1.0 + nombre × 1.5
+```
+
+---
+
+## Fase 2 — Extractor de Chunks
+
+Una vez seleccionados los documentos, el extractor encuentra los **fragmentos más relevantes**.
+
+### Expansión de Consulta
+
+El sistema expande automáticamente los términos de búsqueda según el tipo de pregunta:
+
+| Tipo de pregunta | Expansión automática |
+|-----------------|----------------------|
+| "¿Qué es...?" | sistema, herramienta, instrumento, objeto, consiste |
+| "¿Cuándo...?" | periodicidad, plazo, hábil, trimestre, vencimiento |
+| "¿Quién...?" | responsable, funcionario, competencia, administrador |
+| "¿Cómo...?" | procedimiento, pasos, diligenciar, registrar, módulo |
+| Sanciones | sanción, disciplinaria, incumplimiento, acarreará |
+| Listados | campo, apartado, sección, columna, formulario |
+
+### Algoritmo de Puntuación de Chunks
+
+```python
+def puntuar_chunk(chunk, palabras, pregunta_norm, terminos_prio, idf_local):
+    # TF-IDF por palabra (IDF local al documento)
+    for w in palabras:
+        count = texto.count(w)
+        if count > 0:
+            tf   = 1.0 + log(count)   # log-normalizado
+            base = 3.0 if w in terminos_prio else 1.0
+            base *= idf_local.get(w, 1.0)
+            puntos += tf * base
+
+    # Bonos adicionales:
+    if pregunta_norm in texto:          puntos += 15.0  # Pregunta exacta
+    if PATRON_ARTICULO_GRADO.search():  puntos += 10.0  # art. 5°
+    elif PATRON_ARTICULO_SIMPLE.search(): puntos += 5.0  # artículo 5
+    if lista_numerada:                  puntos +=  4.0
+```
+
+### Bono de Proximidad — Estrategia "Francotirador"
+
+Desliza una ventana de 150 caracteres sobre el chunk y mide la **densidad de co-ocurrencia** de las palabras clave.
+
+```
+Ventana 150 chars → densidad = matches / total_keywords
+
+≥ 90% keywords juntas → +20 puntos (respuesta exacta encontrada)
+≥ 70% keywords juntas → +12 puntos (muy probable)
+≥ 50% keywords juntas → +6  puntos (probable)
+≥ 30% keywords juntas → +2  puntos (señal débil)
+```
+
+**¿Por qué importa?** Un chunk con "incumplimiento disciplinario sanción reportar" en 120 chars obtiene densidad ≈ 1.0 y bono máximo (+20). El mismo chunk con esas palabras dispersas en 800 chars obtiene densidad ≈ 0.25 y bono mínimo.
+
+### Bias de Posición para Preguntas de Definición
+
+Los acuerdos normativos comienzan con el objeto/definición. Para preguntas como "¿Qué es el SIERJU?", se aplica un bono decreciente a los primeros chunks:
+
+```python
+# Chunks 0-4 reciben bono: (5 - índice) × 3.0
+# Chunk 0: +15 puntos | Chunk 1: +12 | Chunk 2: +9 | ...
+```
+
+---
+
+## Selección Adaptativa de Chunks — "Francotirador vs. Escopeta"
+
+El sistema ajusta dinámicamente cuántos chunks enviar al modelo según la distribución de scores:
+
+```python
+ratio = score_chunk_1 / score_chunk_2
+
+ratio ≥ 3.0 → FRANCOTIRADOR: 1 chunk  (~200 tokens) — certeza alta
+ratio ≥ 1.8 → BINÓCULO:      2 chunks (~400 tokens) — certeza media
+ratio < 1.8 → ESCOPETA:      3 chunks (~600 tokens) — ambiguo
+listado     → mínimo 2 chunks (siempre, para capturar todos los ítems)
+docs >80 chunks → máximo 4 chunks (documentos muy grandes)
+```
+
+---
+
+## Diagnóstico del Sistema
+
+```bash
+# Verificar qué documentos detecta el enrutador
+curl "http://localhost:5000/siaa/enrutar?q=consecuencias+por+no+reportar+sierju"
+
+# Ver el fragmento que llegaría al modelo
+curl "http://localhost:5000/siaa/fragmento?doc=acuerdo_no._psaa16-10476.md&q=sanciones"
+
+# Ver keywords TF-IDF de un documento
+curl "http://localhost:5000/siaa/keywords/acuerdo_no._psaa16-10476.md"
+
+# Densidad de un término en todos los documentos
+curl "http://localhost:5000/siaa/densidad/sierju"
+
+# Diagnóstico de tokens de una consulta
+curl "http://localhost:5000/siaa/debug_tokens?q=como+se+diligencia+el+sierju"
+```

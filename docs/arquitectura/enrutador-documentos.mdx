@@ -1,0 +1,156 @@
+---
+title: "Algoritmo de Enrutamiento"
+description: "Enrutador multi-nivel TF-IDF para selección precisa de documentos entre 59 archivos"
+---
+
+# Algoritmo de Enrutamiento
+
+El enrutador es el "portero" del RAG: decide qué documentos consultar antes de extraer fragmentos o llamar al LLM. Opera en 4 niveles de prioridad.
+
+---
+
+## Nivel 0 — Detección de Documento Específico
+
+Si la pregunta menciona literalmente el código de un documento, el sistema busca **solo ese documento**:
+
+```python
+PATRON_DOC_ESPECIFICO = re.compile(
+    r'\b(psaa|pcsja|acuerdo|circular|resolución|decreto)\s*[\w\-\.]+',
+    re.IGNORECASE
+)
+
+# "¿De qué trata el PSAA16-10476?" → solo busca en ese acuerdo
+# Evita ruido de 58 documentos irrelevantes
+```
+
+---
+
+## Nivel 1 — TF-IDF Automático
+
+Al cargar los documentos, se calcula el TF-IDF de cada término por documento:
+
+```python
+tf  = freq_termino / total_tokens_documento
+idf = log((N_docs + 1) / (df_termino + 1)) + 1
+score_tfidf = tf * idf
+```
+
+Se seleccionan las **top-20 keywords** por documento. Durante la consulta:
+
+```python
+# Cada keyword de la pregunta que coincida con las del documento → +1.0
+for kw in keywords_doc:
+    if kw in pregunta_normalizada:
+        scores_tfidf[nombre_doc] += 1.0
+```
+
+---
+
+## Nivel 1B — Keywords Manuales (Peso ×2)
+
+Para documentos críticos, se agregan keywords manuales que reciben el doble de peso:
+
+```python
+KEYWORDS_MANUALES = {
+    "acuerdo_no._psaa16-10476.md": [
+        # Definición
+        "que es sierju", "para que sirve", "objeto", "finalidad",
+        # Plazos
+        "periodicidad", "quinto dia habil", "reportar",
+        # Roles (artículo 7)
+        "roles", "super administrador", "quien puede",
+        # Sanciones (artículos 19-20)
+        "sancion", "incumplimiento", "consecuencia", "disciplinario",
+    ],
+    "acuerdo_pcsja19-11207..md": [
+        "capacitacion", "quien capacita", "cendoj", "udae",
+    ],
+}
+
+# Las keywords manuales valen 2.0 en vez de 1.0
+if kw_manual in pregunta:
+    scores_tfidf[nombre_doc] += 2.0
+```
+
+---
+
+## Nivel 2 — Índice de Densidad
+
+Complementa el TF-IDF con la densidad real de cada término en el documento:
+
+```python
+# Al cargar documentos, construir índice invertido
+nuevo_indice[termino].append((freq / total_tokens, nombre_doc))
+
+# Durante consulta, para cada token de la pregunta:
+idf_aprox = log((N + 1) / (df_t + 1)) + 1
+scores_densidad[nombre_doc] += densidad * idf_aprox
+```
+
+---
+
+## Nivel 3 — Coincidencia por Nombre de Archivo
+
+```python
+# "acuerdo_no._psaa16-10476.md" → tokens: {"acuerdo", "psaa16", "10476"}
+tokens_nombre = {"acuerdo", "psaa16", "10476"}
+coincidencias = tokens_nombre & palabras_pregunta
+scores_nombre[nombre_doc] = len(coincidencias) / len(tokens_nombre)
+```
+
+---
+
+## Puntuación Final Combinada
+
+```python
+score_final = TF-IDF × 2.0 + densidad × 1.0 + nombre × 1.5
+```
+
+**Ejemplo — Consulta: "¿Qué es el PSAA16?"**
+
+| Documento | TF-IDF | Densidad | Nombre | Total |
+|-----------|--------|----------|--------|-------|
+| `acuerdo_no._psaa16-10476.md` | 6.0×2=12 | 3.4×1=3.4 | 2.0×1.5=3 | **18.4** |
+| Otros documentos | <1.0 | <1.0 | 0 | <2.0 |
+
+---
+
+## Fallback por Vocabulario
+
+Si ningún documento supera el umbral mínimo:
+
+```python
+# Contar coincidencias directas de palabras (sin TF-IDF)
+for nombre, doc in snap_docs.items():
+    c = len(palabras_pregunta & doc["palabras"])
+    if c >= 2:
+        scored.append((c, nombre))
+```
+
+---
+
+## Agregar Keywords Manuales — Cuándo y Cómo
+
+Agregue keywords manuales cuando:
+
+1. El enrutador no detecta el documento correcto para una pregunta típica
+2. El documento usa vocabulario técnico no-estándar
+3. Los usuarios preguntan con palabras diferentes a las del documento
+
+```python
+# En siaa_proxy.py, dentro de detectar_documentos()
+KEYWORDS_MANUALES = {
+    "nuevo_documento.md": [
+        "termino que usan los usuarios",
+        "otra forma de preguntar",
+        "sinonimo del concepto principal",
+    ],
+}
+```
+
+```bash
+# Después de modificar las keywords, recargar
+sudo systemctl restart siaa
+# o sin reiniciar (recarga docs pero no el código Python):
+curl http://localhost:5000/siaa/recargar
+```

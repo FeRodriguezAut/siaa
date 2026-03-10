@@ -1,0 +1,67 @@
+---
+title: "Excel a SQLite"
+description: "Conversión de archivos Excel a base de datos SQLite para consultas estructuradas"
+---
+
+# Conversión de Excel a SQLite
+
+El `convertidor.py` convierte automáticamente los archivos Excel encontrados en cada subcarpeta de instructivos a tablas SQLite en `/opt/siaa/institucional.db`.
+
+---
+
+## Propósito
+
+Los archivos Excel contienen típicamente datos tabulares (estadísticas, listas de funcionarios, indicadores) que complementan los documentos Word. SQLite permite consultas estructuradas sobre estos datos.
+
+---
+
+## Proceso de Conversión
+
+```python
+# Para cada archivo .xlsx / .xls encontrado:
+df = pandas.read_excel(ruta_excel, sheet_name=None)  # Todas las hojas
+
+for nombre_hoja, dataframe in df.items():
+    nombre_tabla = normalizar_nombre(nombre_carpeta + "_" + nombre_hoja)
+    dataframe.to_sql(nombre_tabla, conn, if_exists='replace', index=False)
+```
+
+---
+
+## Resultado
+
+```
+=== Tablas SQLite creadas ===
+Base de datos: /opt/siaa/institucional.db
+
+  juzgado_civil_municipal_estadisticas: 45 filas, 8 columnas
+  juzgado_penal_indicadores: 120 filas, 12 columnas
+  juzgado_de_familia_inventario: 67 filas, 6 columnas
+```
+
+---
+
+## Consultar la Base de Datos
+
+```bash
+# Abrir SQLite en línea de comandos
+sqlite3 /opt/siaa/institucional.db
+
+# Ver tablas disponibles
+.tables
+
+# Ver estructura de una tabla
+.schema juzgado_civil_municipal_estadisticas
+
+# Consulta de ejemplo
+SELECT * FROM juzgado_civil_municipal_estadisticas LIMIT 5;
+
+# Salir
+.quit
+```
+
+---
+
+## Integración con el RAG
+
+Los datos SQLite actualmente no se incluyen directamente en el contexto RAG, pero los documentos Markdown generados a partir del Word (que típicamente complementa el Excel) sí se indexan. En versiones futuras se planea incluir resúmenes de las tablas Excel en el contexto.

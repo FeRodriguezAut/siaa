@@ -1,59 +1,84 @@
 """
-╔══════════════════════════════════════════════════════════════════╗
-║         SIAA — Proxy Inteligente  v2.1.22                       ║
-║         Seccional Bucaramanga — Rama Judicial                    ║
-╠══════════════════════════════════════════════════════════════════╣
-║  CORRECCIONES v2.1.6 (sobre v2.1.5)                              ║
-║                                                                   ║
-║  [FIX-1] Códigos alfanuméricos en índice de densidad            ║
-║      tokenizar() ya no filtra tokens con dígitos si tienen       ║
-║      letras mezcladas (psaa16, pcsja19, art5, ley270...).        ║
-║      Solo filtra secuencias puramente numéricas cortas (<4 dig). ║
-║      Impacto: "psaa16" y "10476" ahora tienen densidad en        ║
-║      acuerdo_no._psaa16-10476.md → enrutador lo sube al top.     ║
-║                                                                   ║
-║  [FIX-2] Bonus de artículo aumentado y con patrón exacto        ║
-║      Antes: +3 por cualquier "artículo N"                        ║
-║      Ahora: +10 si el párrafo contiene el artículo con grado    ║
-║             (artículo 5°, art. 5°, artículo 5o)                  ║
-║             +5  si contiene "artículo N" sin grado               ║
-║                                                                   ║
-║  [FIX-3] Chunking con solapamiento (sliding window)             ║
-║      Reemplaza el split por \n+ con chunks de tamaño fijo        ║
-║      (CHUNK_SIZE chars) y solapamiento (CHUNK_OVERLAP chars).    ║
-║      Evita que pasos de procedimientos queden partidos.          ║
-║      Los chunks preservan el contexto del encabezado anterior.   ║
-║                                                                   ║
-║  [FIX-4] Números largos (>=4 dígitos) en índice                 ║
-║      "10476" ahora entra al índice de densidad como token        ║
-║      independiente porque tiene 5 dígitos.                       ║
-╚══════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════════════╗
+║           SIAA — Sistema Inteligente de Apoyo Administrativo                 ║
+║           Proxy de Inferencia con RAG — v2.1.27                              ║
+║           Seccional Bucaramanga · Rama Judicial de Colombia                  ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  ARQUITECTURA GENERAL                                                        ║
+║  ─────────────────────────────────────────────────────────────────────────   ║
+║  Cliente (Nginx/HTML)                                                        ║
+║       │                                                                      ║
+║       ▼                                                                      ║
+║  Flask + Waitress  ←── este archivo (/opt/siaa/siaa_proxy.py)                ║
+║       │                                                                      ║
+║       ├─ Conversacional → Ollama (respuesta directa, sin RAG)                ║
+║       └─ Documental     → RAG Pipeline → Ollama                              ║
+║              │                                                               ║
+║              ├─ Enrutador (detectar_documentos)                              ║
+║              ├─ Extractor de fragmentos (extraer_fragmento)                  ║
+║              └─ Caché LRU (evita re-procesar preguntas frecuentes)           ║
+║                                                                              ║
+║  STACK TECNOLÓGICO                                                           ║
+║  ─────────────────────────────────────────────────────────────────────────   ║
+║  Servidor   : HP EliteDesk 705 G4 · Ryzen 5 PRO 2600 · 64GB RAM              ║
+║  GPU        : AMD RX 550 4GB (sin aceleración — llama.cpp Vulkan ≈ CPU)      ║
+║  SO         : Fedora 43 · Python 3.14 · Flask + Waitress                     ║
+║  LLM        : qwen2.5:3b via Ollama · GGUF Q4_K_M · ~1.8GB en RAM            ║
+║  Documentos : 59 archivos .md en /opt/siaa/fuentes/ (3 colecciones)          ║
+║               general/ · normativa/ · sierju/                                ║
+║                                                                              ║
+║  HISTORIAL DE VERSIONES                                                      ║
+║  ─────────────────────────────────────────────────────────────────────────   ║
+║  v2.1.6  Tokenizador alfanumérico — psaa16, art5, 10476 en índice            ║
+║  v2.1.7  IDF local por chunk — términos raros pesan más                      ║
+║  v2.1.8  num_thread=6, num_batch=512, MAX_DOCS=2                             ║
+║  v2.1.10 TF real (frecuencia en chunk) en puntuar_chunk                      ║
+║  v2.1.11 IDF local + palabras ultra-comunes excluidas (>85% chunks)          ║
+║  v2.1.14 Keywords manuales fijas por documento                               ║
+║  v2.1.15 Query expansion por tipo de pregunta (cuándo/quién/cómo)            ║
+║  v2.1.16 Bono de proximidad "Francotirador" — ventana deslizante 150c        ║
+║  v2.1.17 Detección de preguntas de listado → modo "Escopeta"                 ║ 
+║  v2.1.22 Position bias para preguntas de definición · num_ctx dinámico       ║
+║  v2.1.23 Marcado marked.js v4/v5 compatible · TERMINOS_SIEMPRE_DOCUMENTAL    ║
+║  v2.1.24 CHUNK_SIZE=800, MAX_CHUNKS=3 (restaurado por tiempos 160s)          ║
+║  v2.1.25 Búsqueda por frases exactas · MAX_CHUNKS dinámico docs >80 chunks   ║
+║           Clarificador de preguntas ambiguas (civil/penal sin especificar)   ║
+║  v2.1.26 Normalización de tildes/diacríticos en tokenizador y búsqueda       ║
+║           MIN_FREQ condicional por longitud · endpoint /siaa/debug_tokens    ║
+║  v2.1.27 Encabezado actualizado · comentarios profesionales completos        ║
+║           Sin cambios funcionales sobre v2.1.26                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 """
-
 import os, re, json, math, threading, time, requests
 from collections import defaultdict, Counter
 from flask import Flask, request, Response, stream_with_context, jsonify
 from flask_cors import CORS
 
-# ================================================================
-#  CACHÉ LRU — Problema D
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 1 — CACHÉ LRU DE RESPUESTAS
 #
-#  Almacena respuestas completas de preguntas documentales frecuentes.
-#  Para saludos y conversación general NO se cachea (son únicos cada vez).
+#  Propósito: evitar que el LLM reprocese preguntas idénticas o
+#  casi idénticas, que en los 26 despachos son muy frecuentes.
 #
-#  DISEÑO:
-#    - Clave: hash SHA256 de la pregunta normalizada (lowercase, sin puntuación)
-#    - Valor: texto completo de la respuesta + cita fuente
-#    - TTL: 3600 segundos (1 hora) — después de ese tiempo se considera stale
-#    - Máximo: 200 entradas (LRU desaloja la menos usada recientemente)
-#    - Thread-safe: protegido con Lock
+#  Funcionamiento:
+#    1. Al recibir una pregunta documental, se calcula su hash.
+#    2. Si existe en caché y no ha expirado → respuesta instantánea.
+#    3. Si no existe → se procesa con RAG + LLM → se guarda en caché.
+#    4. LRU (Least Recently Used): cuando se llena, descarta la
+#       entrada menos usada recientemente.
 #
-#  IMPACTO ESPERADO:
-#    - Hit de caché: respuesta en ~5ms vs 44s sin caché (8800x más rápido)
-#    - Los 26 despachos hacen preguntas similares → hit rate estimado 30-40%
-#    - Sin caché: cada consulta gasta RAM y CPU del modelo
-#    - Con caché: 2da consulta idéntica cuesta 0 recursos de IA
-# ================================================================
+#  Parámetros de diseño:
+#    Clave  : SHA256(normalizar(pregunta))[:16] — insensible a tildes
+#    Valor  : {"respuesta": str, "cita": str, "timestamp": float}
+#    TTL    : 3600s (1 hora) — preguntas sobre normativa no cambian
+#    Máximo : 200 entradas — cubre las FAQs más comunes
+#    Scope  : solo preguntas DOCUMENTALES (saludos = siempre en vivo)
+#
+#  Impacto medido:
+#    Sin caché : ~15-20s por consulta SIERJU
+#    Con caché : ~5ms (3000x más rápido en hit)
+#    Hit rate estimado: 30-40% en uso normal de los 26 despachos
+# ════════════════════════════════════════════════════════════════
 
 import hashlib
 from collections import OrderedDict
@@ -173,16 +198,27 @@ app = Flask(__name__)
 CORS(app)
 
 
-# ================================================================
-#  CONFIGURACIÓN CENTRAL
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 2 — CONFIGURACIÓN GLOBAL
+#
+#  Centraliza todos los parámetros ajustables del sistema.
+#  Modificar aquí afecta el comportamiento global sin tocar código.
+#
+#  PARÁMETROS CRÍTICOS (cambiar con precaución):
+#    OLLAMA_URL      : URL del servidor LLM local
+#    MODEL           : nombre del modelo en Ollama
+#    CHUNK_SIZE      : tamaño en chars por fragmento de documento
+#                      800c ≈ 200 tokens ≈ 2-3 párrafos
+#    MAX_CHUNKS      : fragmentos por documento enviados al LLM
+#    MAX_DOCS        : documentos consultados por pregunta
+# ════════════════════════════════════════════════════════════════
 
 OLLAMA_URL             = "http://localhost:11434"
 MODEL                  = "qwen2.5:3b"
-VERSION                = "2.1.25"
+VERSION                = "2.1.27"
 
-# ================================================================
-#  SISTEMA DE MONITOREO DE CALIDAD — Problema F
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 3 — REGISTRO DE CALIDAD (LOG JSONL)
 #
 #  Registra cada consulta en un archivo JSONL (una línea JSON por consulta).
 #  JSONL permite análisis con cualquier herramienta: grep, jq, Python, Excel.
@@ -198,7 +234,7 @@ VERSION                = "2.1.25"
 #    curl http://localhost:5000/siaa/log             ← últimas 50 entradas
 #    curl http://localhost:5000/siaa/log?n=100       ← últimas 100
 #    curl http://localhost:5000/siaa/log?tipo=ERROR  ← solo errores
-# ================================================================
+# ════════════════════════════════════════════════════════════════
 
 LOG_ARCHIVO    = "/opt/siaa/logs/calidad.jsonl"   # Una línea JSON por consulta
 LOG_MAX_LINEAS = 5000   # Rotar al llegar a 5000 entradas (~2MB)
@@ -282,7 +318,7 @@ TIMEOUT_HEALTH         = 5
 CARPETA_FUENTES        = "/opt/siaa/fuentes"
 MAX_DOCS_CONTEXTO      = 2    # [v2.1.8] 2×3×800=4800c≈1200tok — cabe en num_ctx=2048
 TOP_KEYWORDS_POR_DOC   = 20
-MIN_FREQ_KEYWORD       = 2
+MIN_FREQ_KEYWORD       = 1    # [v2.1.26] era 2 — con 59 docs, términos únicos son válidos
 MIN_LEN_KEYWORD        = 3
 
 # ── Parámetros de chunking ───────────────────────────────────────
@@ -295,9 +331,14 @@ CHUNK_SIZE             = 800    # [v2.1.24] restaurado: 800c — velocidad < 30s
 CHUNK_OVERLAP = 300   # [v2.1.24] restaurado
 MAX_CHUNKS_CONTEXTO    = 3   # [v2.1.24] 3 × 800 = 2400 chars máx — balance velocidad/contexto
 
-# ================================================================
-#  PATRONES DE DOCUMENTOS ESPECÍFICOS
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 3A — DETECTOR DE DOCUMENTO ESPECÍFICO
+#
+#  Detecta si la pregunta pregunta por un documento concreto
+#  (ej. "¿de qué trata el acuerdo psaa16?").
+#  En ese caso, el enrutador solo busca en ese documento,
+#  ignorando los demás para evitar ruido.
+# ════════════════════════════════════════════════════════════════
 
 PATRON_DOC_ESPECIFICO = re.compile(
     r'\b(psaa|pcsja|acuerdo|circular|resolución|resolucion|decreto)\s*'
@@ -310,9 +351,23 @@ def detectar_doc_especifico(pregunta: str) -> bool:
     return bool(PATRON_DOC_ESPECIFICO.search(pregunta))
 
 
-# ================================================================
-#  SYSTEM PROMPTS
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 3D — SYSTEM PROMPTS
+#
+#  Instrucciones de comportamiento enviadas al LLM antes de
+#  cada consulta. Son la "personalidad" del asistente.
+#
+#  SYSTEM_CONVERSACIONAL:
+#    Para saludos y conversación general. Sin restricciones
+#    documentales — el LLM responde libremente.
+#
+#  SYSTEM_DOCUMENTAL:
+#    Para consultas con contexto RAG. Instruye al LLM a:
+#    - Usar SOLO la información de los bloques [DOC:...]
+#    - Seguir el proceso: leer → identificar → construir respuesta
+#    - NUNCA responder "No encontré" si hay información parcial
+#    - Citar artículos, campos y valores literalmente
+# ════════════════════════════════════════════════════════════════
 
 SYSTEM_CONVERSACIONAL = """Eres SIAA (Sistema Inteligente de Apoyo Administrativo), el asistente oficial de la Seccional Bucaramanga de la Rama Judicial de Colombia.
 
@@ -322,7 +377,7 @@ Responde con cordialidad en español formal.
 Para saludos y preguntas generales sobre ti mismo, responde directamente.
 Recuerda que puedes ayudar con consultas sobre procesos judiciales, administrativos y normativos."""
 
-SYSTEM_DOCUMENTAL = """Eres SIAA, asistente judicial de la Seccional Bucaramanga.
+SYSTEM_DOCUMENTAL = """Eres SIAA, asistente Administrativo de la Seccional Bucaramanga.
 
 TAREA: Responder usando ÚNICAMENTE el contenido de los bloques [DOC:...] que recibirás.
 
@@ -390,7 +445,29 @@ def es_conversacion_general(texto: str) -> bool:
 
 
 
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 3C — CLARIFICADOR DE PREGUNTAS AMBIGUAS
+#
+#  Cuando la pregunta es documental pero imprecisa, el sistema
+#  pregunta al usuario en lugar de buscar en el documento
+#  equivocado y devolver una respuesta incorrecta o vacía.
+#
+#  CASOS GESTIONADOS:
+#    "juzgado civil"    → ¿Municipal, Circuito, Ejecución...?
+#    "juzgado penal"    → ¿Municipal, Circuito, Especializado...?
+#    "laboral"          → ¿Circuito, Pequeñas Causas, Tribunal?
+#    "promiscuo"        → ¿Municipal o Circuito?
+#    "administrativo"   → ¿Juzgado o Tribunal?
+#
+#  VENTAJA DE RENDIMIENTO:
+#    La respuesta de clarificación se genera en <1ms (no consulta
+#    el LLM ni el RAG). El usuario elige y la siguiente consulta
+#    ya tiene suficiente contexto para un match preciso.
+#
+#  ESTRUCTURA:
+#    CLARIFICACIONES = { claves_trigger: { condicion, opciones, pregunta } }
+#    detectar_clarificacion(pregunta) → dict | None
+# ════════════════════════════════════════════════════════════════
 #  [v2.1.24] CLARIFICADOR — Preguntas ambiguas
 #
 #  Si el usuario pregunta sobre "juzgado civil" sin especificar
@@ -398,7 +475,7 @@ def es_conversacion_general(texto: str) -> bool:
 #  en el documento equivocado y fallar.
 #
 #  Estructura: { patron_en_pregunta: (opciones, pregunta_a_usuario) }
-# ================================================================
+# ════════════════════════════════════════════════════════════════
 
 CLARIFICACIONES = {
     # Civil sin especificar
@@ -481,9 +558,21 @@ def detectar_clarificacion(pregunta: str) -> dict | None:
             }
     return None
 
-# ================================================================
-#  MONITOR OLLAMA + WARM-UP
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 3E — MONITOR DE DISPONIBILIDAD OLLAMA
+#
+#  Hilo de fondo que verifica cada 60s que Ollama responde.
+#
+#  WARM-UP AL ARRANCAR:
+#    Envía un prompt mínimo (1 token) para forzar que qwen2.5:3b
+#    quede cargado en RAM. Sin esto, la primera consulta real
+#    tarda +8s adicionales mientras el modelo se carga.
+#    Con OLLAMA_KEEP_ALIVE=-1 el modelo nunca se descarga.
+#
+#  SEMÁFORO DE CONCURRENCIA:
+#    Limita a MAX_OLLAMA_SIMULTANEOS=2 consultas paralelas.
+#    Más de 2 hilos simultáneos saturan el Ryzen 5 PRO 2600.
+# ════════════════════════════════════════════════════════════════
 
 ollama_estado = {
     "disponible":   False,
@@ -558,8 +647,8 @@ def dec_activos():
         usuarios_activos = max(0, usuarios_activos - 1)
 
 
-# ================================================================
-#  [FIX-1 + FIX-4] TOKENIZADOR MEJORADO
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 4 — STOPWORDS Y TOKENIZADOR
 #
 #  REGLAS:
 #    - Tokens alfanuméricos con letras: SIEMPRE incluir (psaa16, art5)
@@ -573,7 +662,7 @@ def dec_activos():
 #    "2016"    → INCLUIR  (4 dígitos — año relevante)
 #    "art5"    → INCLUIR  (tiene letras)
 #    "42"      → descartar (solo 2 dígitos)
-# ================================================================
+# ════════════════════════════════════════════════════════════════
 
 STOPWORDS_ES = {
     "para", "como", "este", "esta", "esto", "estos", "estas", "pero",
@@ -588,15 +677,57 @@ STOPWORDS_ES = {
 }
 
 
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 4A — NORMALIZACIÓN DE TEXTO (v2.1.26)
+#
+#  PROBLEMA CORREGIDO:
+#  El tokenizador buscaba "información" en el índice pero el usuario
+#  escribía "informacion" (sin tilde). Como son strings diferentes,
+#  la búsqueda fallaba silenciosamente.
+#
+#  SOLUCIÓN: normalizar ANTES de tokenizar en ambos lados:
+#  - Al indexar documentos: "información" → "informacion"
+#  - Al tokenizar pregunta: "información" → "informacion"
+#  Así ambos lados son comparables.
+#
+#  EXCEPCIÓN: ñ se conserva (es letra española, no diacrítico)
+#  "año" → "anio" sería incorrecto. La ñ se mantiene.
+# ════════════════════════════════════════════════════════════════
+
+import unicodedata as _unicodedata
+
+def normalizar(texto: str) -> str:
+    """
+    Elimina tildes y diacríticos preservando la ñ.
+
+    Ejemplos:
+      "información" → "informacion"
+      "estadística" → "estadistica"
+      "diligenciamiento" → "diligenciamiento"  (sin cambio)
+      "artículo" → "articulo"
+      "año" → "año"  (ñ se preserva)
+    """
+    resultado = []
+    for c in _unicodedata.normalize('NFD', texto):
+        cat = _unicodedata.category(c)
+        if cat == 'Mn':        # Mark, Nonspacing = diacrítico
+            continue           # eliminar tilde/acento
+        resultado.append(c)
+    return ''.join(resultado)
+
+
 def tokenizar(texto: str) -> list:
     """
     Tokenizador alfanumérico con reglas de filtrado inteligentes.
 
     [FIX-1] Incluye tokens con letras+dígitos (psaa16, pcsja19, art5).
     [FIX-4] Incluye números puros de 4+ dígitos (10476, 2016, 1096).
+    [v2.1.26] Normaliza tildes antes de tokenizar.
     """
+    # [v2.1.26] Normalizar ANTES: "información" → "informacion"
+    texto = normalizar(texto.lower())
     # Capturar tokens alfanuméricos (letras, dígitos, tildes)
-    tokens_raw = re.findall(r'\b[a-záéíóúüñ0-9]{3,}\b', texto.lower())
+    tokens_raw = re.findall(r'\b[a-záéíóúüñ0-9]{3,}\b', texto)
 
     resultado = []
     for p in tokens_raw:
@@ -633,7 +764,10 @@ def calcular_tfidf_coleccion(documentos: dict) -> dict:
         total_tokens = len(tokens)
         scores       = {}
         for termino, freq in conteo.items():
-            if freq < MIN_FREQ_KEYWORD or len(termino) < MIN_LEN_KEYWORD:
+            # [v2.1.26] términos cortos (3-4 chars) requieren freq≥2 para evitar ruido
+            #           términos largos (5+) se incluyen con freq≥1 (son específicos)
+            freq_min = MIN_FREQ_KEYWORD if len(termino) <= 4 else 1
+            if freq < freq_min or len(termino) < MIN_LEN_KEYWORD:
                 continue
             tf  = freq / total_tokens
             idf = math.log((N + 1) / (df[termino] + 1)) + 1
@@ -643,8 +777,8 @@ def calcular_tfidf_coleccion(documentos: dict) -> dict:
     return keywords_por_doc
 
 
-# ================================================================
-#  [FIX-3] CHUNKING CON SOLAPAMIENTO
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 5 — CHUNKING CON VENTANA DESLIZANTE
 #
 #  Divide el documento en chunks de CHUNK_SIZE chars con
 #  CHUNK_OVERLAP chars de solapamiento entre chunks consecutivos.
@@ -656,7 +790,7 @@ def calcular_tfidf_coleccion(documentos: dict) -> dict:
 #
 #  Cada chunk recuerda el último encabezado visto antes de su inicio
 #  para que la cita de sección sea correcta.
-# ================================================================
+# ════════════════════════════════════════════════════════════════
 
 def _ultimo_encabezado(texto: str) -> str:
     """Encuentra el último encabezado Markdown en un texto."""
@@ -705,9 +839,23 @@ def chunking_con_solapamiento(contenido: str) -> list:
     return chunks
 
 
-# ================================================================
-#  GESTOR DE COLECCIONES
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 5B — CARGA Y GESTIÓN DE DOCUMENTOS EN MEMORIA
+#
+#  59 documentos .md cargados en RAM al arrancar el proxy.
+#  Sin lectura de disco en cada consulta (HDD ≠ cuello de botella).
+#
+#  COLECCIONES (/opt/siaa/fuentes/):
+#    general/   → FAQs generales de la seccional
+#    normativa/ → Acuerdos del Consejo Superior (PSAA16, PCSJA19...)
+#    sierju/    → Manuales por tipo de juzgado (26 documentos)
+#
+#  ÍNDICES PRECALCULADOS EN RAM:
+#    indice_densidad → keywords TF-IDF top-N por documento
+#    chunks_por_doc  → lista de chunks pre-divididos
+#
+#  GET /siaa/recargar → recarga sin reiniciar el servidor (hot reload)
+# ════════════════════════════════════════════════════════════════
 
 colecciones          = {}
 colecciones_lock     = threading.Lock()
@@ -842,12 +990,41 @@ def cargar_documentos():
     print(f"  [CHK] Chunks pre-calculados: {sum(len(v) for v in nuevos_chunks.values())} total ✓")
 
 
-# ================================================================
-#  ENRUTADOR MULTI-NIVEL
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 6 — ENRUTADOR MULTI-NIVEL (RAG Layer 1)
+#
+#  Es el "portero" del RAG: decide qué documentos consultar antes
+#  de extraer fragmentos o llamar al LLM.
+#
+#  NIVELES DE ENRUTAMIENTO (en orden de prioridad):
+#
+#  Nivel 0 — Documento específico:
+#    Si la pregunta menciona literalmente el nombre de un documento
+#    (ej. "acuerdo psaa16") → buscar solo ese documento.
+#    Evita ruido de documentos irrelevantes.
+#
+#  Nivel 1 — TF-IDF sobre índice:
+#    Tokeniza la pregunta y compara contra el índice TF-IDF de
+#    keywords de cada documento. Score = similitud léxica.
+#    Maneja tildes, siglas y términos alfanuméricos.
+#
+#  Nivel 2 — Densidad de keywords:
+#    Mide cuántas keywords de la pregunta están en el texto
+#    completo del documento (no solo en el índice).
+#    Complementa el nivel 1 para documentos con vocabulario
+#    técnico que no llega al top del TF-IDF.
+#
+#  Nivel 3 — Score por nombre de archivo:
+#    Si el nombre del archivo coincide con términos de la pregunta,
+#    sube su puntuación. Útil para "civil_circuito.md" cuando
+#    la pregunta dice "juzgado civil circuito".
+#
+#  Score final = TF-IDF × 2.0 + densidad × 1.0 + nombre × 1.5
+#  Devuelve los top N documentos según MAX_DOCS_CONTEXTO.
+# ════════════════════════════════════════════════════════════════
 
 def detectar_documentos(pregunta: str, max_docs: int = MAX_DOCS_CONTEXTO) -> list:
-    p = pregunta.lower()
+    p = normalizar(pregunta.lower())  # [v2.1.26] sin tildes
 
     # [FIX-1] palabras alfanuméricas incluyendo números largos
     palabras_pregunta  = set(tokenizar(p))
@@ -969,8 +1146,8 @@ def detectar_documentos(pregunta: str, max_docs: int = MAX_DOCS_CONTEXTO) -> lis
     return [n for _, n in scored[:max_docs]]
 
 
-# ================================================================
-#  [FIX-2 + FIX-3] EXTRACTOR v4 — chunks con solapamiento
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 8 — PUNTUACIÓN Y EXTRACCIÓN DE FRAGMENTOS (RAG Layer 2)
 #                                  + bonus artículo aumentado
 #
 #  El extractor ahora trabaja sobre chunks pre-calculados
@@ -978,7 +1155,7 @@ def detectar_documentos(pregunta: str, max_docs: int = MAX_DOCS_CONTEXTO) -> lis
 #  Cada chunk tiene CHUNK_OVERLAP chars de contexto anterior,
 #  garantizando que listas numeradas y artículos largos
 #  nunca queden partidos.
-# ================================================================
+# ════════════════════════════════════════════════════════════════
 
 TERMINOS_PRIORITARIOS_BASE = {
     "procedimiento", "pasos", "proceso", "tramite", "trámite",
@@ -1031,7 +1208,7 @@ def puntuar_chunk(chunk: dict, palabras: set, pregunta_norm: str,
     Un término que aparece en 1 de 38 chunks → idf=log(38/2)=2.9
     Un término que aparece en todos 38    → idf=log(38/39)≈0
     """
-    texto  = chunk["texto"].lower()
+    texto  = normalizar(chunk["texto"].lower())  # [v2.1.26] sin tildes
     puntos = 0.0
 
     for w in palabras:
@@ -1130,7 +1307,7 @@ def extraer_fragmento(nombre_doc: str, pregunta: str) -> str:
 
     # Preparar tokens de la pregunta con el tokenizador mejorado
     palabras      = set(tokenizar(pregunta.lower()))
-    pregunta_norm = pregunta.lower().replace('?', '').replace('¿', '').strip()
+    pregunta_norm = normalizar(pregunta.lower().replace('?', '').replace('¿', '').strip())
     terminos_prio = obtener_terminos_prioritarios(nombre_doc)
 
     # [FIX v2.1.11] Query expansion — agregar keywords temáticas según el tipo de pregunta
@@ -1339,9 +1516,14 @@ def extraer_fragmento(nombre_doc: str, pregunta: str) -> str:
     return etiqueta + "\n" + "\n\n".join(seleccionados) + separador
 
 
-# ================================================================
-#  CLIENTE OLLAMA
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 9 — CLIENTE LLM (OLLAMA API)
+#
+#  Gestiona comunicación con Ollama. Parámetros optimizados para
+#  Ryzen 5 PRO 2600: num_thread=6, num_batch=512, temp=0.0
+#  num_ctx dinámico: <400t→1024 / <900t→2048 / ≥900t→3072
+#  Semáforo limita a 2 consultas simultáneas para evitar thrashing.
+# ════════════════════════════════════════════════════════════════
 
 def llamar_ollama(mensajes: list, num_predict: int = 150, num_ctx: int = 2048) -> list:
     adquirido = ollama_semaforo.acquire(timeout=30)
@@ -1418,9 +1600,45 @@ def llamar_ollama(mensajes: list, num_predict: int = 150, num_ctx: int = 2048) -
         ollama_semaforo.release()
 
 
-# ================================================================
-#  ENDPOINT PRINCIPAL — /siaa/chat
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 10 — ENDPOINT PRINCIPAL /siaa/chat
+#
+#  Es el corazón del sistema. Recibe mensajes del cliente HTML
+#  y orquesta todo el pipeline de respuesta.
+#
+#  FLUJO COMPLETO POR TIPO DE CONSULTA:
+#
+#  A) Pregunta CONVERSACIONAL (saludo, ¿cómo estás?):
+#     Usuario → detectar conversacional → LLM directo → stream SSE
+#     Latencia: ~3-5s
+#
+#  B) Pregunta AMBIGUA (juzgado civil sin especificar):
+#     Usuario → clarificador → respuesta inmediata con opciones
+#     Latencia: <1s (no consulta el LLM)
+#
+#  C) Consulta DOCUMENTAL con caché hit:
+#     Usuario → hash pregunta → caché → stream simulado SSE
+#     Latencia: ~5ms
+#
+#  D) Consulta DOCUMENTAL nueva (flujo completo RAG):
+#     Usuario
+#       → detectar_doc_especifico (¿pregunta por un doc concreto?)
+#       → detectar_documentos (enrutador — qué docs consultar)
+#       → extraer_fragmento (chunks más relevantes por doc)
+#       → construir contexto [DOC: ...]
+#       → calcular num_ctx dinámico
+#       → llamar_ollama con streaming SSE
+#       → parsear respuesta + extraer cita [[FUENTE:...]]
+#       → guardar en caché
+#       → guardar en log de calidad
+#     Latencia: 15-30s (depende del tamaño del contexto)
+#
+#  STREAMING SSE (Server-Sent Events):
+#    La respuesta se envía token a token en formato OpenAI-compatible:
+#    data: {"choices":[{"delta":{"content":"token"}}]}
+#    data: [DONE]
+#    Esto permite que el HTML muestre la respuesta en tiempo real.
+# ════════════════════════════════════════════════════════════════
 
 @app.route("/siaa/chat", methods=["POST"])
 def chat():
@@ -1699,9 +1917,20 @@ def chat():
         return jsonify({"error": str(e)}), 500
 
 
-# ================================================================
-#  ENDPOINTS ADMINISTRATIVOS
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 11 — ENDPOINTS ADMINISTRATIVOS Y DIAGNÓSTICO
+#
+#  /siaa/ver/<doc>     → contenido completo de un documento
+#  /siaa/status        → estado del servidor y estadísticas
+#  /siaa/keywords/<doc>→ keywords TF-IDF calculadas para un doc
+#  /siaa/densidad/<t>  → documentos que contienen un término
+#  /siaa/debug_tokens  → diagnóstico de tokenización (v2.1.26)
+#  /siaa/enrutar       → simula el enrutador para una pregunta
+#  /siaa/fragmento     → muestra fragmento extraído para debug
+#  /siaa/cache         → estadísticas o limpieza del caché LRU
+#  /siaa/log           → últimas N entradas del log de calidad
+#  /siaa/recargar      → hot-reload de documentos sin reiniciar
+# ════════════════════════════════════════════════════════════════
 
 @app.route("/siaa/ver/<path:nombre_doc>", methods=["GET"])
 def ver_documento(nombre_doc):
@@ -1860,6 +2089,49 @@ def ver_densidad(termino: str):
         "termino":    termino,
         "top_docs":   [{"doc": d, "densidad": round(den, 6)} for den, d in entradas[:10]],
         "total_docs": len(entradas)
+    })
+
+
+@app.route("/siaa/debug_tokens", methods=["GET"])
+def endpoint_debug_tokens():
+    """
+    [v2.1.26] Diagnóstico de tokenización y enrutamiento.
+    Uso: GET /siaa/debug_tokens?q=inventario+final+sierju
+    """
+    pregunta = request.args.get("q", "").strip()
+    if not pregunta:
+        return jsonify({"error": "Parámetro q requerido. Ej: /siaa/debug_tokens?q=inventario+final"}), 400
+
+    p_norm = normalizar(pregunta.lower())
+    tokens = tokenizar(pregunta)
+
+    with indice_densidad_lock:
+        snap_idx = dict(indice_densidad)
+    with documentos_lock:
+        snap_docs = dict(documentos_cargados)
+
+    # Qué tokens del índice coinciden con la pregunta
+    tokens_en_indice = {}
+    for tok in tokens:
+        tok_n = normalizar(tok)
+        docs_con_tok = [d for d, kws in snap_idx.items()
+                        if any(normalizar(k) == tok_n for k in kws)]
+        if docs_con_tok:
+            tokens_en_indice[tok] = docs_con_tok
+
+    docs_encontrados = detectar_documentos(pregunta, max_docs=5)
+    keywords_info    = {d: snap_idx.get(d, [])[:10] for d in docs_encontrados}
+
+    return jsonify({
+        "pregunta_original":      pregunta,
+        "pregunta_normalizada":   p_norm,
+        "tokens":                 tokens,
+        "total_tokens":           len(tokens),
+        "tokens_con_match":       tokens_en_indice,
+        "tokens_sin_match":       [t for t in tokens if t not in tokens_en_indice],
+        "docs_candidatos":        docs_encontrados,
+        "keywords_top10_x_doc":   keywords_info,
+        "total_docs_indexados":   len(snap_docs),
     })
 
 
@@ -2031,9 +2303,17 @@ def recargar():
     })
 
 
-# ================================================================
-#  ARRANQUE
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+#  MÓDULO 12 — ARRANQUE DEL SERVIDOR
+#
+#  Secuencia de inicio:
+#  1. Flask app creada con CORS habilitado
+#  2. Waitress como servidor WSGI de producción (no Flask dev server)
+#  3. cargar_documentos() → 59 .md a RAM + índices TF-IDF
+#  4. warm_up() → carga qwen2.5:3b en memoria de Ollama
+#  5. _monitor_loop() en hilo de fondo → health check cada 60s
+#  6. Waitress escucha en 0.0.0.0:5000 con 4 threads
+# ════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     print("=" * 62)

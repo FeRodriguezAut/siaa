@@ -1,0 +1,137 @@
+---
+title: "Integración con Ollama"
+description: "Configuración de Ollama, gestión del modelo y optimización de inferencia en CPU"
+---
+
+# Integración con Ollama
+
+SIAA usa **Ollama** como motor de inferencia local para el modelo `qwen2.5:3b`. Toda la comunicación es vía API REST en `http://localhost:11434`.
+
+---
+
+## Por Qué Qwen2.5:3b
+
+| Modelo | Tiempo/consulta | Razón descartado |
+|--------|----------------|-----------------|
+| `deepseek-r1:8b` | ~90s | Inutilizable |
+| `qwen3:8b` | >6 minutos | Completamente inviable |
+| `llama3.2:3b` | ~15s | Menor precisión en español legal |
+| **`qwen2.5:3b`** | **~15s** | ✅ Equilibrio óptimo |
+
+---
+
+## Parámetros de Inferencia Optimizados
+
+```python
+"options": {
+    "temperature":    0.0,    # Determinístico — sin alucinar
+    "num_predict":    150,    # 300 para preguntas de listado
+    "num_ctx":        2048,   # Adaptativo según tamaño del contexto
+    "num_thread":     6,      # Núcleos FÍSICOS (no usar 12 — causa thrashing)
+    "num_batch":      512,    # Reduce TTFT significativamente
+    "repeat_penalty": 1.1,
+    "stop": [
+        "\n\n\n", "Espero que", "Es importante destacar",
+        "Cabe destacar que", "En conclusión,", "Sin embargo,",
+        "Por otro lado,", "Cabe mencionar"
+    ]
+}
+```
+
+**¿Por qué `num_thread=6` y no 12?**
+El Ryzen 5 PRO 2600 tiene 6 núcleos físicos y 12 hilos lógicos (SMT). Usar los 12 hilos lógicos genera thrashing de caché L3 y **aumenta la latencia en ~40%**. Los 6 núcleos físicos son el valor óptimo.
+
+---
+
+## `num_ctx` Dinámico
+
+```python
+# Calculado según el tamaño del contexto a enviar
+tokens_estimados = ctx_chars / 4    # ~4 chars por token
+
+if tokens_estimados < 400:   num_ctx = 1024
+elif tokens_estimados < 900: num_ctx = 2048
+else:                        num_ctx = 3072
+```
+
+Esto evita reservar memoria innecesaria para consultas simples.
+
+---
+
+## Monitoreo de Salud Automático
+
+Un hilo en segundo plano verifica Ollama cada 15 segundos:
+
+```python
+def verificar_ollama() -> bool:
+    r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=TIMEOUT_HEALTH)
+    ok = (r.status_code == 200)
+    
+    # Warm-up: cargar modelo en RAM en la primera conexión exitosa
+    if ok and warmup_pendiente:
+        requests.post(f"{OLLAMA_URL}/api/chat", json={
+            "model": MODEL,
+            "messages": [{"role": "user", "content": "ok"}],
+            "stream": False,
+            "options": {"num_predict": 1, "num_ctx": 64}
+        })
+```
+
+El warm-up previene el retardo de ~30s en la primera consulta real.
+
+---
+
+## Mantener el Modelo en RAM
+
+```bash
+# En /etc/systemd/system/ollama.service
+[Service]
+Environment="OLLAMA_KEEP_ALIVE=-1"
+Environment="OLLAMA_NUM_PARALLEL=2"
+```
+
+Con `KEEP_ALIVE=-1`, el modelo permanece en RAM indefinidamente. Esto elimina la carga de disco en cada consulta.
+
+---
+
+## Modelfile Personalizado
+
+Para fijar los parámetros de inferencia directamente en el modelo:
+
+```bash
+cat > /opt/siaa/Modelfile << 'EOF'
+FROM qwen2.5:3b
+PARAMETER num_thread 6
+PARAMETER num_batch 512
+PARAMETER temperature 0.0
+PARAMETER num_ctx 2048
+PARAMETER repeat_penalty 1.1
+EOF
+
+ollama create siaa-qwen -f /opt/siaa/Modelfile
+```
+
+En `siaa_proxy.py`:
+```python
+MODEL = "siaa-qwen"    # En lugar de "qwen2.5:3b"
+```
+
+---
+
+## Comandos de Diagnóstico Ollama
+
+```bash
+# Modelos disponibles
+ollama list
+
+# Modelo actualmente en RAM
+curl http://localhost:11434/api/ps
+
+# Warm-up manual
+curl -X POST http://localhost:11434/api/generate \
+  -d '{"model":"qwen2.5:3b","prompt":"hola","stream":false}'
+
+# Estado del servicio
+systemctl status ollama
+journalctl -u ollama -n 20
+```

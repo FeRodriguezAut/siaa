@@ -1,0 +1,80 @@
+---
+title: "Gestión del Caché"
+description: "Administración del caché LRU: estadísticas, limpieza e invalidación"
+---
+
+# Gestión del Caché
+
+---
+
+## Ver Estadísticas
+
+```bash
+curl http://localhost:5000/siaa/cache
+```
+
+```json
+{
+  "entradas": 47,
+  "max": 200,
+  "hits": 152,
+  "misses": 89,
+  "hit_rate": "63.1%",
+  "ttl_seg": 3600
+}
+```
+
+---
+
+## Limpiar el Caché
+
+```bash
+curl -X DELETE http://localhost:5000/siaa/cache
+```
+
+**¿Cuándo limpiar?**
+- Después de actualizar documentos en `/opt/siaa/fuentes/`
+- Cuando se detecten respuestas incorrectas cacheadas
+- Al cambiar el system prompt `SYSTEM_DOCUMENTAL`
+
+---
+
+## Flujo Recomendado al Actualizar Documentos
+
+```bash
+# 1. Convertir nuevos documentos
+python3 convertidor.py
+python3 convertidor_pdf.py
+
+# 2. Limpiar caché (respuestas previas pueden ser incorrectas)
+curl -X DELETE http://localhost:5000/siaa/cache
+
+# 3. Recargar índice
+curl http://localhost:5000/siaa/recargar
+
+# 4. Verificar
+curl http://localhost:5000/siaa/estado
+```
+
+---
+
+## Programar Limpieza Nocturna (Cron)
+
+```bash
+# Limpiar caché cada noche a las 2 AM (si los documentos se actualizan frecuentemente)
+0 2 * * * curl -s -X DELETE http://localhost:5000/siaa/cache
+```
+
+---
+
+## Monitoreo Continuo del Caché
+
+```bash
+# Actualiza cada 5 segundos
+watch -n 5 'curl -s http://localhost:5000/siaa/cache | python3 -m json.tool'
+```
+
+**Hit rate bajo (<20%) puede indicar:**
+- Las preguntas son muy diversas → aumentar `CACHE_MAX_ENTRADAS`
+- El TTL es demasiado corto → aumentar `CACHE_TTL_SEGUNDOS`
+- La mayoría de consultas son conversacionales → normal (no se cachean)

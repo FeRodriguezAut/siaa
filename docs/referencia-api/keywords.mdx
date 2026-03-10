@@ -1,0 +1,30 @@
+---
+title: "GET /siaa/keywords/{nombre_doc}"
+description: "Ver las keywords TF-IDF de un documento"
+---
+
+# GET /siaa/keywords/{nombre_doc}
+
+Devuelve las keywords TF-IDF calculadas automáticamente para un documento específico.
+
+## Ejemplo
+
+```bash
+curl "http://localhost:5000/siaa/keywords/acuerdo_no._psaa16-10476.md"
+```
+
+## Respuesta
+
+```json
+{
+  "doc": "acuerdo_no._psaa16-10476.md",
+  "keywords": [
+    "sierju", "reporte", "habiles", "formulario", "periodicidad",
+    "inventario", "psaa16", "despacho", "magistrado", "discrepancia",
+    "ingresos", "egresos", "efectivos", "inventario", "trimestre",
+    "quinto", "cargar", "funcionario", "responsable", "sancion"
+  ]
+}
+```
+
+Use este endpoint para verificar si las keywords relevantes de un documento están bien representadas. Si faltan términos importantes, agréguelos como keywords manuales en `KEYWORDS_MANUALES`.

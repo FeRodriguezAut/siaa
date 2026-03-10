@@ -1,0 +1,145 @@
+---
+title: "Monitoreo de Calidad"
+description: "Registro JSONL con detección de alucinaciones, seguimiento de consultas y métricas de rendimiento"
+---
+
+# Monitoreo de Calidad
+
+SIAA registra cada consulta en formato **JSONL** (una línea JSON por consulta). El sistema detecta automáticamente posibles problemas, rastrea métricas de rendimiento y proporciona endpoints para análisis.
+
+---
+
+## Configuración
+
+```python
+LOG_ARCHIVO    = "/opt/siaa/logs/calidad.jsonl"
+LOG_MAX_LINEAS = 5000   # Rota al llegar a 5000 líneas (~2MB)
+```
+
+---
+
+## Estructura de Cada Entrada
+
+```json
+{
+  "ts":        "2026-03-08T14:23:45",
+  "tipo":      "DOC",
+  "alerta":    "OK",
+  "pregunta":  "cuando debo reportar al sierju",
+  "respuesta": "Debe reportar antes del quinto día hábil...",
+  "docs":      ["acuerdo_no._psaa16-10476.md"],
+  "ctx_chars": 2400,
+  "tiempo_s":  28.3
+}
+```
+
+| Campo | Valores | Descripción |
+|-------|---------|-------------|
+| `tipo` | `CONV`, `DOC`, `CACHE_HIT`, `ERROR` | Tipo de consulta |
+| `alerta` | `OK`, `SIN_CONTEXTO`, `POSIBLE_ALUCINACION`, `ERROR` | Resultado del control de calidad |
+| `ctx_chars` | número | Caracteres de contexto enviados al modelo (0 en caché) |
+| `tiempo_s` | número | Segundos de respuesta (0.0 en caché) |
+
+---
+
+## Detección de Alucinaciones
+
+El sistema identifica automáticamente posibles problemas:
+
+| Situación | Alerta |
+|-----------|--------|
+| El modelo respondió "no encontré" pero SÍ había documentos con contexto | `POSIBLE_ALUCINACION` ⚠️ |
+| No hay documentos para la consulta — respuesta correcta | `SIN_CONTEXTO` ✅ |
+| Respuesta normal con documentos | `OK` ✅ |
+
+**¿Por qué importa?** Si el enrutador encontró el documento correcto, el extractor seleccionó chunks relevantes, pero el modelo aún responde "no encontré" → hay un problema en el system prompt o en la calidad del fragmento extraído.
+
+---
+
+## Consultar el Log
+
+```bash
+# Últimas 50 consultas (JSON)
+curl "http://localhost:5000/siaa/log?n=50"
+
+# Formato texto legible para terminal
+curl "http://localhost:5000/siaa/log?n=20&formato=txt"
+
+# Filtrar por alerta
+curl "http://localhost:5000/siaa/log?alerta=POSIBLE_ALUCINACION"
+curl "http://localhost:5000/siaa/log?alerta=ERROR"
+
+# Filtrar por tipo
+curl "http://localhost:5000/siaa/log?tipo=CACHE_HIT"
+curl "http://localhost:5000/siaa/log?tipo=DOC"
+```
+
+**Respuesta con resumen:**
+
+```json
+{
+  "resumen": {
+    "total_consultas":        847,
+    "errores":                3,
+    "posibles_alucinaciones": 12,
+    "cache_hits":             243,
+    "tiempo_promedio_s":      26.4
+  },
+  "entradas": [...],
+  "mostrando": 50
+}
+```
+
+---
+
+## Análisis con jq
+
+```bash
+# Contar consultas por tipo
+cat /opt/siaa/logs/calidad.jsonl | jq -r '.tipo' | sort | uniq -c
+
+# Consultas más lentas
+cat /opt/siaa/logs/calidad.jsonl | jq -r '[.pregunta, .tiempo_s] | @tsv' \
+  | sort -k2 -rn | head -10
+
+# Todas las posibles alucinaciones
+cat /opt/siaa/logs/calidad.jsonl | jq 'select(.alerta == "POSIBLE_ALUCINACION")'
+
+# Tiempo promedio por documento
+cat /opt/siaa/logs/calidad.jsonl \
+  | jq -r '[.docs[0], .tiempo_s] | @tsv' \
+  | awk '{sum[$1]+=$2; count[$1]++} END {for (d in sum) print d, sum[d]/count[d]}'
+```
+
+---
+
+## Métricas de Calidad Objetivo
+
+| Métrica | Objetivo | Alarma |
+|---------|----------|--------|
+| Tasa de alucinaciones | < 5% | > 10% |
+| Tasa de error | < 1% | > 3% |
+| Hit rate caché | > 30% | < 15% |
+| Tiempo promedio | < 30s | > 45s |
+
+---
+
+## Rotación del Log
+
+Cuando el log supera `LOG_MAX_LINEAS`:
+1. Se conservan las últimas 4.000 líneas
+2. Las entradas antiguas se eliminan permanentemente
+
+**Para archivo histórico:**
+
+```bash
+# Cron diario a las 2:00 AM
+0 2 * * * cp /opt/siaa/logs/calidad.jsonl \
+  /opt/siaa/archive/calidad-$(date +\%Y\%m\%d).jsonl
+
+# Comprimir archivos de más de 7 días
+find /opt/siaa/archive -name '*.jsonl' -mtime +7 -exec gzip {} \;
+
+# Eliminar archivos de más de 90 días
+find /opt/siaa/archive -name '*.jsonl.gz' -mtime +90 -delete
+```

@@ -1,0 +1,161 @@
+---
+title: "Pipeline de Procesamiento de Documentos"
+description: "Conversión automática de Word, PDF y Excel a Markdown indexable"
+---
+
+# Pipeline de Procesamiento de Documentos
+
+SIAA incluye tres herramientas de conversión que transforman documentos institucionales en Markdown indexable por el sistema RAG.
+
+---
+
+## Flujo General
+
+```
+Documentos originales
+    ├── .docx / .doc  ──→  convertidor.py      ──→  .md  (Markdown)
+    ├── .xlsx / .xls  ──→  convertidor.py      ──→  .db  (SQLite)
+    └── .pdf          ──→  convertidor_pdf.py  ──→  .md  (Markdown)
+                                                      ↓
+                                          /opt/siaa/fuentes/
+                                                      ↓
+                                    siaa_proxy.py (índice en RAM)
+```
+
+---
+
+## Convertidor Word/Excel (`convertidor.py`)
+
+Convierte pares de archivos (un Word + un Excel por carpeta) a Markdown y SQLite.
+
+### Estructura de Carpetas Esperada
+
+```
+/opt/siaa/instructivos/
+├── Juzgado Civil Municipal/
+│   ├── manual_civil_municipal.docx   ← Documento Word
+│   └── datos_estadisticos.xlsx       ← Excel (opcional)
+├── Juzgado Penal/
+│   ├── instructivo_penal.docx
+│   └── estadisticas_penal.xlsx
+└── ...
+```
+
+### Ejecutar la Conversión
+
+```bash
+# Convertir todos los documentos
+python3 convertidor.py
+
+# Convertir solo una carpeta específica
+python3 convertidor.py --only-folder "Juzgado Civil Municipal"
+
+# Rutas personalizadas
+python3 convertidor.py \
+  --origen /ruta/entrada \
+  --dest-md /ruta/salida \
+  --db /ruta/base.db
+```
+
+### Salida Esperada
+
+```
+==========================================================
+  SIAA — Convertidor Completo
+  Origen : /opt/siaa/instructivos
+  MD     : /opt/siaa/fuentes
+  SQLite : /opt/siaa/institucional.db
+==========================================================
+
+  → Juzgado Civil Municipal (.docx) ... ✅ (1.2s)
+
+=== Markdown generados ===
+  juzgado_civil_municipal.md
+
+=== Tablas SQLite ===
+  juzgado_civil_municipal: 45 filas
+```
+
+---
+
+## Convertidor PDF (`convertidor_pdf.py`)
+
+Convierte PDFs a Markdown con detección automática entre PDF nativo y PDF escaneado.
+
+### Lógica de Detección
+
+```
+¿El PDF tiene texto nativo?
+    SÍ (≥200 chars) → pymupdf4llm (rápido, preciso)
+    NO (<200 chars) → OCR con Tesseract (más lento, pero funciona en escaneados)
+```
+
+### Ejecutar la Conversión
+
+```bash
+# Conversión automática (detecta nativo vs. escaneado)
+python3 convertidor_pdf.py
+
+# Forzar OCR para todos los PDFs
+python3 convertidor_pdf.py --forzar-ocr
+
+# Reconvertir solo los fallidos o vacíos
+python3 convertidor_pdf.py --reconvertir
+```
+
+### Salida Esperada
+
+```
+=======================================================
+  SIAA Convertidor PDF v2.0
+  PDFs: 3 | Modo: Auto
+  Salida: /opt/siaa/fuentes/normativa
+=======================================================
+
+  📂 acuerdo_psaa16-10476.pdf
+    ✅ acuerdo_psaa16-10476.md → 24,679 chars [pymupdf4llm]
+
+  📂 resolucion_escaneada.pdf
+    ⚠ pymupdf extrajo 45 chars → OCR automático...
+    📷 Convirtiendo a imágenes (DPI=300)...
+    📄 5 página(s)
+    🔍 OCR página 5/5...
+    ✅ resolucion_escaneada.md → 8,234 chars [OCR Tesseract]
+```
+
+### Configuración del Convertidor PDF
+
+```python
+CARPETA_ENTRADA = "/opt/siaa/pdfs_origen"
+CARPETA_SALIDA  = "/opt/siaa/fuentes/normativa"
+MIN_CHARS       = 200    # Umbral para activar OCR
+OCR_DPI         = 300    # Resolución de imagen para OCR
+OCR_LANG        = "spa"  # Idioma Tesseract
+```
+
+---
+
+## Agregar Nuevos Documentos — Flujo Completo
+
+```bash
+# 1. Agregar el archivo al directorio correcto
+cp nuevo_instructivo.docx /opt/siaa/instructivos/"Juzgado de Familia"/
+# o
+cp nuevo_acuerdo.pdf /opt/siaa/pdfs_origen/
+
+# 2. Convertir
+python3 convertidor.py      # Para Word/Excel
+python3 convertidor_pdf.py  # Para PDFs
+
+# 3. Limpiar caché (respuestas anteriores pueden estar desactualizadas)
+curl -X DELETE http://localhost:5000/siaa/cache
+
+# 4. Recargar el índice sin reiniciar el servidor
+curl http://localhost:5000/siaa/recargar
+
+# 5. Verificar que el documento quedó indexado
+curl http://localhost:5000/siaa/estado | grep documentos_cargados
+
+# 6. Probar que el enrutador lo detecta
+curl "http://localhost:5000/siaa/enrutar?q=juzgado+familia+inventario"
+```

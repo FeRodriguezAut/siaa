@@ -1,0 +1,29 @@
+# Documentos institucionales — no subir al repositorio público
+fuentes/
+instructivos/
+pdfs_origen/
+logs/
+*.jsonl
+*.db
+
+# Modelos Ollama — demasiado grandes para Git
+modelos/
+*.gguf
+*.bin
+
+# Temporales
+/tmp/
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*~
+
+# Sistema
+.DS_Store
+Thumbs.db
