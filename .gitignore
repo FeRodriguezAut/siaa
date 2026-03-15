@@ -29,3 +29,10 @@ env.example
 /tmp/
 *.tmp
 *.log
+
+# Carpetas institucionales adicionales
+Instructivos/
+Documentos_MD/
+pdfs_origen/
+img/
+__pycache__/
