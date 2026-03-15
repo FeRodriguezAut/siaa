@@ -1,151 +1,31 @@
-# ══════════════════════════════════════════════════════════════
-#  SIAA — Sistema Inteligente de Apoyo Administrativo
-#  .gitignore — Solo sube el código fuente, NUNCA datos sensibles
-#  Rama Judicial · Seccional Bucaramanga
-# ══════════════════════════════════════════════════════════════
-
-
-# ── Variables de entorno (NUNCA subir al repo) ──────────────────
+# Documentos institucionales — NUNCA al repo
+fuentes/
+instructivos/
+pdfs_origen/
+ 
+# Papelera del sistema
+.Trash-*/
+ 
+# Logs operativos
+logs/
+ 
+# Archivos de respaldo y versiones antiguas
+*_backup.py
+siaa_proxy2*.py
+siaa_proxy21*.py
+ 
+# Python
+__pycache__/
+*.pyc
+*.pyo
 .env
-.env.local
-.env.production
-.env.*
-!.env.example          # Sí subir la plantilla de ejemplo
-
-
-# ── Documentos institucionales (datos sensibles) ────────────────
-fuentes/               # .md generados — pueden contener info confidencial
-instructivos/          # Word/Excel originales de la Rama Judicial
-normativa/             # Documentos normativos originales
-sierju/                # Datos del sistema SIERJU
-
-
-# ── Base de datos local ─────────────────────────────────────────
+env.example
+ 
+# Base de datos local
 *.db
 *.sqlite
-*.sqlite3
-institucional.db
-
-
-# ── Logs del sistema ────────────────────────────────────────────
-logs/
-*.log
-*.jsonl
-conversion_errores.log
-
-
-# ── Archivos temporales de conversión ───────────────────────────
-/tmp/siaa_temp/
+ 
+# Temporales
+/tmp/
 *.tmp
-*.temp
-
-
-# ── Python ──────────────────────────────────────────────────────
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.Python
-*.egg
-*.egg-info/
-dist/
-build/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.whl
-.installed.cfg
-MANIFEST
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Entornos virtuales
-.venv/
-venv/
-env/
-ENV/
-.virtualenv/
-
-# pytest / coverage
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.cache/
-
-# mypy / pyright
-.mypy_cache/
-.dmypy.json
-dmypy.json
-pyrightconfig.json
-
-
-# ── Modelos LLM (pesados, se instalan con Ollama) ───────────────
-*.gguf
-*.bin
-*.safetensors
-modelos/
-
-
-# ── Editores e IDEs ─────────────────────────────────────────────
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.project
-.classpath
-.settings/
-*.sublime-project
-*.sublime-workspace
-
-
-# ── Sistema operativo ───────────────────────────────────────────
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-desktop.ini
-
-
-# ── Versiones antiguas (ya están en git history) ────────────────
-*_backup_*
-*_v2.1.23*
-*_v2.1.24*
-*_v2.1.25*
-*_v2.1.26*
-siaa_proxy_backup_*
-index_v2.1.*
-siaa_proxy_v2.1.*
-
-
-# ── Nginx (configuración local del servidor) ────────────────────
-nginx-*/
-*.pid
-
-
-# ── Archivos de mejoras intermedias ─────────────────────────────
-mejoras/
-
-
-# ══════════════════════════════════════════════════════════════
-#  QUÉ SÍ SE SUBE AL REPO:
-#  ✅ src/siaa_proxy.py        — código fuente actual
-#  ✅ src/convertidor.py       — conversor Word/Excel
-#  ✅ src/convertidor_pdf.py   — conversor PDF
-#  ✅ web/index.html           — frontend
-#  ✅ docs/                    — documentación Mintlify
-#  ✅ config/                  — nginx y systemd de referencia
-#  ✅ scripts/                 — scripts de instalación
-#  ✅ .env.example             — plantilla de variables
-#  ✅ README.md                — portada del proyecto
-#  ✅ mint.json                — config Mintlify
-# ══════════════════════════════════════════════════════════════
+*.log

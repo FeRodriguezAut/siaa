@@ -1,10 +1,53 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SIAA - Seccional Bucaramanga</title>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!--
+      [v2.1.26] marked.js: se intenta CDN primero; si no hay internet
+      el fallback inline garantiza operación 100% en LAN sin internet.
+    -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
+            onerror="window._markedCdnFailed=true;"></script>
+    <script>
+    (function() {
+        if (window.marked && typeof window.marked.parse === 'function') return;
+        console.warn('[SIAA v2.1.26] marked.js CDN no disponible — usando renderizador local.');
+        function escH(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+        function inl(s){
+            s=s.replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>');
+            s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+            s=s.replace(/__(.+?)__/g,'<strong>$1</strong>');
+            s=s.replace(/\*(.+?)\*/g,'<em>$1</em>');
+            s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
+            s=s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,function(_,t,u){
+                if(u.includes('/siaa/ver/')){var n=decodeURIComponent(u.split('/siaa/ver/')[1]||'').replace(/_/g,' ').replace(/\.md$/i,'').toUpperCase();return '<button class="btn-ver-doc" onclick="abrirDoc(\''+u+'\',\''+n+'\')">📖 Ver '+n+'</button>';}
+                return '<a href="'+u+'" target="_blank" rel="noopener">'+t+'</a>';
+            });
+            return s;
+        }
+        function mdParse(src){
+            src=src||'';
+            src=src.replace(/```[\w]*\n([\s\S]*?)```/g,function(_,c){return '<pre><code>'+escH(c.trim())+'</code></pre>';});
+            src=src.replace(/((?:\|[^\n]+\|\n)+)/g,function(_,tbl){
+                var rows=tbl.trim().split('\n').filter(function(r){return !/^\|[-| :]+\|/.test(r);});
+                var h='<table style="border-collapse:collapse;width:100%;font-size:.9em">';
+                rows.forEach(function(r,i){var tag=i===0?'th':'td';h+='<tr>'+r.split('|').slice(1,-1).map(function(c){return '<'+tag+' style="border:1px solid #dce3f0;padding:5px 8px">'+inl(c.trim())+'</'+tag+'>';}).join('')+'</tr>';});
+                return h+'</table>';
+            });
+            src=src.replace(/^#{1,6}\s+(.+)$/gm,function(_,t){return '<h3 style="color:var(--judicial-blue);margin:10px 0 4px">'+inl(t)+'</h3>';});
+            src=src.replace(/^---+$/gm,'<hr style="border:none;border-top:1px solid #dce3f0;margin:8px 0">');
+            src=src.replace(/((?:^[\*\-\+] .+\n?)+)/gm,function(_,b){return '<ul style="padding-left:18px;margin:4px 0">'+b.trim().split('\n').map(function(l){return '<li>'+inl(l.replace(/^[\*\-\+] /,''))+'</li>';}).join('')+'</ul>';});
+            src=src.replace(/((?:^\d+\. .+\n?)+)/gm,function(_,b){return '<ol style="padding-left:18px;margin:4px 0">'+b.trim().split('\n').map(function(l){return '<li>'+inl(l.replace(/^\d+\. /,''))+'</li>';}).join('')+'</ol>';});
+            src=src.replace(/\n{2,}/g,'\n__PB__\n');
+            src=src.replace(/([^\n<>]+)\n(?!__PB__|<)/g,'$1<br>');
+            src=src.split('\n__PB__\n').map(function(p){p=p.trim();if(!p)return '';if(/^<[uoph]|^<pre|^<table|^<hr/.test(p))return p;return '<p>'+inl(p)+'</p>';}).join('');
+            return src;
+        }
+        window.marked={parse:mdParse,Renderer:function(){this.link=null;},use:function(){},setOptions:function(){}};
+    })();
+    </script>
     <style>
         :root {
             --judicial-blue: #1a2a6c;
@@ -12,6 +55,26 @@
             --judicial-light: #e8ecf8;
             --bg: #f0f2f8;
             --shadow: 0 4px 20px rgba(26,42,108,0.10);
+            /* Light theme extras */
+            --surface: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --border: #dce3f0;
+            --input-bg: #f8faff;
+            --bottom-bg: #ffffff;
+            --status-bg: #ffffff;
+        }
+        [data-theme="dark"] {
+            --judicial-gold: #d4aa6a;
+            --bg: #07101f;
+            --surface: #0d1a2e;
+            --shadow: 0 4px 20px rgba(0,0,0,0.45);
+            --text-primary: #dde6f4;
+            --text-secondary: #8da8c8;
+            --border: #1c2d46;
+            --input-bg: #0d1a2e;
+            --bottom-bg: #09111e;
+            --status-bg: #060e1a;
         }
         *, *::before, *::after { box-sizing: border-box; }
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
@@ -21,6 +84,8 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
+            color: var(--text-primary);
+            transition: background 0.3s, color 0.3s;
         }
         header {
             background: var(--judicial-blue);
@@ -32,28 +97,76 @@
             border-bottom: 5px solid var(--judicial-gold);
             flex-shrink: 0;
             box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+            transition: background 0.3s;
         }
+        /* Botón toggle de tema — en el header */
+        #theme-toggle {
+            background: rgba(255,255,255,0.10);
+            border: 1px solid rgba(255,255,255,0.20);
+            color: rgba(255,255,255,0.80);
+            width: 30px; height: 30px; border-radius: 7px;
+            cursor: pointer; font-size: 0.90rem;
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.2s; padding: 0;
+            letter-spacing: 0; text-transform: none;
+            font-weight: 400; flex-shrink: 0;
+        }
+        #theme-toggle:hover { background: rgba(255,255,255,0.20); color: white; transform: none; }
         .logo-principal { height: 70px; width: auto; }
         .escudo-rama    { height: 60px; width: auto; }
         .texto-header h2   { margin: 0 0 2px 0; font-size: 1.35rem; letter-spacing: 2px; font-weight: 700; }
         .texto-header span { color: var(--judicial-gold); font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; }
         .version-badge { font-size: 0.65rem; color: rgba(255,255,255,0.5); letter-spacing: 1px; text-align: right; margin-top: 2px; }
+        /* ── STATUS BAR — CONCURRENCIA [v2.1.27] ──────────────── */
         #status-bar {
-            background: #fff;
-            border-bottom: 1px solid #dce3f0;
-            padding: 5px 32px;
-            font-size: 0.75rem;
+            background: var(--status-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 0 32px;
+            height: 32px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: space-between;
+            gap: 12px;
             flex-shrink: 0;
+            transition: background 0.3s, border-color 0.3s;
         }
-        #connection-dot { width: 9px; height: 9px; border-radius: 50%; background: #ccc; display: inline-block; transition: background 0.4s; }
-        #connection-dot.ok       { background: #22c55e; }
-        #connection-dot.error    { background: #ef4444; }
-        #connection-dot.checking { background: #f59e0b; animation: pulse 1s infinite; }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        #connection-text { color: #475569; font-weight: 600; }
+        .sb-left  { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; overflow: hidden; }
+        .sb-right { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+        .sb-sep   { width: 1px; height: 14px; background: #dce3f0; flex-shrink: 0; }
+
+        #connection-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #cbd5e1; flex-shrink: 0;
+            transition: background 0.4s, box-shadow 0.4s;
+        }
+        #connection-dot.ok      { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.50); }
+        #connection-dot.busy    { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.50); }
+        #connection-dot.queued  { background: #f97316; box-shadow: 0 0 6px rgba(249,115,22,0.50); animation: sb-pulse 1.6s ease infinite; }
+        #connection-dot.error   { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.50); }
+        #connection-dot.checking{ background: #94a3b8; animation: sb-pulse 1.2s ease infinite; }
+        @keyframes sb-pulse { 0%,100%{opacity:1} 50%{opacity:0.30} }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} } /* mantener para compat */
+
+        #connection-text {
+            font-size: 0.72rem; font-weight: 600; color: #334155;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            letter-spacing: 0.2px;
+        }
+        /* Pills de estado */
+        .sb-pill {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 20px;
+            font-size: 0.65rem; font-weight: 700;
+            letter-spacing: 0.5px; text-transform: uppercase;
+            white-space: nowrap; transition: all 0.35s ease;
+        }
+        .sb-pill svg { flex-shrink: 0; }
+        .pill-free   { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+        .pill-busy   { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+        .pill-full   { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+        .pill-queue  { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+        .pill-wait   { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; animation:sb-pulse 1.8s ease infinite; }
+        .pill-error  { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
 
         /* CRÍTICO: flex-direction column + min-height 0 resuelve el orden de mensajes */
         #chat-box {
@@ -78,9 +191,9 @@
         .user-row { justify-content: flex-end; }
         .bot-avatar {
             width: 42px; height: 42px; border-radius: 8px;
-            background: white; border: 2px solid var(--judicial-gold);
+            background: var(--surface); border: 2px solid var(--judicial-gold);
             flex-shrink: 0; object-fit: contain; padding: 3px;
-            align-self: flex-start;
+            align-self: flex-start; transition: background 0.3s;
         }
         .msg {
             padding: 14px 20px; border-radius: 16px;
@@ -89,13 +202,15 @@
             word-break: break-word;
         }
         .user { background: var(--judicial-blue); color: white; border-top-right-radius: 3px; }
-        .bot  { background: white; color: #1e293b; border-top-left-radius: 3px; border-left: 5px solid var(--judicial-gold); }
+        .bot  { background: var(--surface); color: var(--text-primary); border-top-left-radius: 3px; border-left: 5px solid var(--judicial-gold); transition: background 0.3s; }
         .bot p { margin: 0 0 8px 0; }
         .bot p:last-child { margin-bottom: 0; }
         .bot ul, .bot ol { padding-left: 20px; margin: 6px 0; }
         .bot li { margin-bottom: 4px; }
         .bot code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.88em; }
+        [data-theme="dark"] .bot code { background: #0d1a2e; color: var(--judicial-gold); }
         .bot strong { color: var(--judicial-blue); }
+        [data-theme="dark"] .bot strong { color: #9bbce0; }
         .fuente-cita {
             margin-top: 10px !important;
             padding: 6px 10px !important;
@@ -126,17 +241,23 @@
         .typing-dots span {
             display: inline-block; width: 7px; height: 7px;
             background: var(--judicial-gold); border-radius: 50%; margin: 0 2px;
-            animation: bounce 1.2s infinite;
+            animation: wave 1.4s ease infinite; opacity: 0.7;
         }
-        .typing-dots span:nth-child(2) { animation-delay: .2s; }
-        .typing-dots span:nth-child(3) { animation-delay: .4s; }
+        .typing-dots span:nth-child(1) { animation-delay: 0s; }
+        .typing-dots span:nth-child(2) { animation-delay: .20s; }
+        .typing-dots span:nth-child(3) { animation-delay: .40s; }
+        @keyframes wave {
+            0%,60%,100% { transform: translateY(0);   opacity: 0.65; }
+            30%          { transform: translateY(-7px); opacity: 1; }
+        }
         @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-7px)} }
         #bottom-container {
-            background: white;
-            border-top: 2px solid var(--judicial-light);
+            background: var(--bottom-bg);
+            border-top: 2px solid var(--border);
             padding: 14px 32px 18px;
             flex-shrink: 0;
             box-shadow: 0 -4px 20px rgba(26,42,108,0.08);
+            transition: background 0.3s, border-color 0.3s;
         }
         /* Bubble loading state */
         .bot-loading {
@@ -224,14 +345,15 @@
         .input-group { display: flex; gap: 10px; max-width: 1100px; margin: 0 auto; align-items: flex-end; }
         textarea#userInput {
             flex: 1; padding: 13px 18px;
-            border: 2px solid #c8d3e8; border-radius: 10px;
-            font-size: .97rem; outline: none; transition: border-color .25s;
-            background: #f8faff; color: #1e293b;
+            border: 2px solid var(--border); border-radius: 10px;
+            font-size: .97rem; outline: none; transition: border-color .25s, background .25s;
+            background: var(--input-bg); color: var(--text-primary);
             font-family: inherit; resize: none;
             min-height: 48px; max-height: 120px;
             overflow-y: auto; line-height: 1.5;
         }
-        textarea#userInput:focus    { border-color: var(--judicial-blue); background: white; }
+        textarea#userInput:focus    { border-color: var(--judicial-blue); background: var(--surface); }
+        [data-theme="dark"] textarea#userInput:focus { border-color: var(--judicial-gold); }
         textarea#userInput:disabled { opacity: .6; cursor: not-allowed; }
         .hint-text { text-align: center; font-size: 0.7rem; color: #94a3b8; margin-top: 6px; max-width: 1100px; margin-left: auto; margin-right: auto; }
         button {
@@ -250,6 +372,8 @@
         #doc-overlay {
             display: none; position: fixed; inset: 0;
             background: rgba(10,20,60,0.6); z-index: 99000;
+            backdrop-filter: blur(3px);
+            -webkit-backdrop-filter: blur(3px);
         }
         #doc-overlay.open { display: flex; align-items: stretch; justify-content: flex-end; }
         #doc-panel {
@@ -381,19 +505,23 @@
 
 <header>
     <img src="img/logo_completo.png" class="logo-principal" alt="SIAA" onerror="this.style.display='none'">
-    <div style="display:flex; align-items:center; gap:20px;">
+    <div style="display:flex; align-items:center; gap:14px;">
+        <button id="theme-toggle" onclick="toggleTheme()" title="Modo oscuro/claro">🌙</button>
         <div class="texto-header" style="text-align:right;">
             <h2>SIAA</h2>
             <span>SECCIONAL BUCARAMANGA</span>
-            <div class="version-badge">v2.1.25</div>
+            <div class="version-badge">v2.1.27</div>
         </div>
         <img src="img/Escudo-rama.png" class="escudo-rama" alt="Rama Judicial" onerror="this.style.display='none'">
     </div>
 </header>
 
 <div id="status-bar">
-    <span id="connection-dot" class="checking"></span>
-    <span id="connection-text">Conectando con servidor IA...</span>
+    <div class="sb-left">
+        <span id="connection-dot" class="checking"></span>
+        <span id="connection-text">Conectando...</span>
+    </div>
+    <div class="sb-right" id="sb-pills"></div>
 </div>
 
 <div id="chat-box">
@@ -409,9 +537,10 @@
                 <div style="font-size:.9rem; color:#334155; line-height:1.6;">
                     Soy el <strong>Sistema Inteligente de Apoyo Administrativo</strong> de la Seccional Bucaramanga,
                     Rama Judicial de Colombia.<br>
-                    Estoy aquí para apoyarle en <strong>toda el área administrativa</strong> de la seccional:
-                    estadísticas judiciales (SIERJU), normativa vigente, talento humano, bienestar,
-                    nómina, procesos administrativos internos y documentación institucional.<br>
+                    Estoy aquí para apoyarle en todas las áreas de la seccional:
+                    <strong>Recursos Humanos</strong> (nómina, vacaciones, licencias, bienestar, carrera judicial),
+                    <strong>estadísticas judiciales</strong> (SIERJU), <strong>normativa vigente</strong>,
+                    procesos administrativos internos y documentación institucional.<br>
                     <span style="font-size:.83rem; color:#64748b;">
                         Mi base de conocimiento crece continuamente con los documentos de la seccional.
                     </span>
@@ -436,9 +565,10 @@
                 <div id="faq-drawer" style="display:none; margin-top:10px; border:1.5px solid #dce3f0;
                     border-radius:10px; overflow:hidden; box-shadow:0 4px 16px rgba(26,42,108,0.08);">
 
-                    <!-- Pestañas -->
+                    <!-- Pestañas — orden: RR.HH · SIERJU · Normativa · Juzgados · Administrativo -->
                     <div style="display:flex; background:#f8faff; border-bottom:1px solid #dce3f0; overflow-x:auto;">
-                        <button class="faq-tab active" onclick="cambiarTab('sierju', this)">📊 SIERJU</button>
+                        <button class="faq-tab active" onclick="cambiarTab('rrhh', this)">👥 RR.HH</button>
+                        <button class="faq-tab" onclick="cambiarTab('sierju', this)">📊 SIERJU</button>
                         <button class="faq-tab" onclick="cambiarTab('normativa', this)">📜 Normativa</button>
                         <button class="faq-tab" onclick="cambiarTab('juzgados', this)">⚖️ Juzgados</button>
                         <button class="faq-tab" onclick="cambiarTab('administrativo', this)">🏛️ Administrativo</button>
@@ -448,8 +578,37 @@
                     <div id="faq-body" style="max-height:260px; overflow-y:auto; padding:12px 14px;
                         background:white; display:flex; flex-direction:column; gap:4px;">
 
+                        <!-- RR.HH — PRIMERA pestaña activa por defecto -->
+                        <div id="faq-rrhh" class="faq-section">
+                            <div class="faq-seccion-titulo">👥 Nómina y Pagos</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cuándo se paga la nómina en la Rama Judicial?')">¿Cuándo se paga la nómina?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo se calcula la prima de servicios en la Rama Judicial?')">¿Cómo se calcula la prima de servicios?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cuándo se pagan las cesantías en la Rama Judicial?')">¿Cuándo se pagan las cesantías?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo se liquidan las vacaciones en la Rama Judicial?')">¿Cómo se liquidan las vacaciones?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué descuentos aparecen en el desprendible de pago?')">¿Qué descuentos aparecen en el desprendible?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo solicitar un certificado de ingresos y retenciones?')">¿Cómo solicitar certificado de ingresos?</button>
+                            <div class="faq-seccion-titulo" style="margin-top:8px;">👥 Vacaciones y Licencias</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cuántos días de vacaciones tiene un empleado de la Rama Judicial?')">¿Cuántos días de vacaciones corresponden?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo se solicita el disfrute de vacaciones en la Rama Judicial?')">¿Cómo solicitar vacaciones?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué tipos de licencia existen en la Rama Judicial?')">¿Qué tipos de licencia existen?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo solicitar una licencia de maternidad o paternidad?')">¿Cómo solicitar licencia de maternidad/paternidad?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué es una comisión de servicios en la Rama Judicial?')">¿Qué es una comisión de servicios?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo solicitar un permiso remunerado?')">¿Cómo solicitar un permiso remunerado?</button>
+                            <div class="faq-seccion-titulo" style="margin-top:8px;">👥 Bienestar y Capacitación</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué programas de bienestar ofrece la Rama Judicial en Bucaramanga?')">¿Qué programas de bienestar hay?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo inscribirse en las capacitaciones de la Escuela Judicial?')">¿Cómo inscribirse en capacitaciones?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué es el plan de bienestar e incentivos de la Rama Judicial?')">¿Qué es el plan de bienestar e incentivos?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo afiliarse al fondo de empleados de la Rama Judicial?')">¿Cómo afiliarse al fondo de empleados?</button>
+                            <div class="faq-seccion-titulo" style="margin-top:8px;">👥 Vinculación y Carrera Judicial</div>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo funciona la carrera judicial en Colombia?')">¿Cómo funciona la carrera judicial?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué es el escalafón de la carrera judicial?')">¿Qué es el escalafón de la carrera judicial?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo solicitar traslado dentro de la Rama Judicial?')">¿Cómo solicitar un traslado?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Cómo se realiza la evaluación del desempeño en la Rama Judicial?')">¿Cómo es la evaluación del desempeño?</button>
+                            <button class="faq-item" onclick="enviarFAQ('¿Qué documentos se requieren para posesionarse en un cargo judicial?')">¿Qué documentos se necesitan para posesionarse?</button>
+                        </div>
+
                         <!-- SIERJU -->
-                        <div id="faq-sierju" class="faq-section">
+                        <div id="faq-sierju" class="faq-section" style="display:none;">
                             <div class="faq-seccion-titulo">📊 SIERJU — General</div>
                             <button class="faq-item" onclick="enviarFAQ('¿Qué es el SIERJU?')">¿Qué es el SIERJU?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Para qué sirve el SIERJU?')">¿Para qué sirve el SIERJU?</button>
@@ -541,26 +700,29 @@
 const SERVER_HOST = window.location.hostname || '172.16.62.103';
 const PROXY_URL   = `http://${SERVER_HOST}:5000`;
 
-// [v2.1.25] Configurar marked — compatible con marked v4 y v5+
-// En v5+ renderer.link recibe un token {href,title,text}; en v4 recibe args separados
-const renderer = new marked.Renderer();
-renderer.link = function(hrefOrToken, title, text) {
-    let href, linkTitle, linkText;
-    if (hrefOrToken && typeof hrefOrToken === 'object') {
-        href = hrefOrToken.href || ''; linkTitle = hrefOrToken.title || ''; linkText = hrefOrToken.text || '';
-    } else {
-        href = hrefOrToken || ''; linkTitle = title || ''; linkText = text || '';
-    }
-    if (href && href.includes('/siaa/ver/')) {
-        const partes = href.split('/siaa/ver/');
-        const nombre = decodeURIComponent(partes[1] || '').replace(/_/g,' ').replace(/\.md$/i,'').toUpperCase();
-        return `<button class="btn-ver-doc" onclick="abrirDoc('${href}','${nombre}')">📖 Ver ${nombre}</button>`;
-    }
-    const t = linkTitle ? ` title="${linkTitle}"` : '';
-    return `<a href="${href}"${t} target="_blank" rel="noopener">${linkText}</a>`;
-};
-// marked.use() es la API moderna (v5+); setOptions legado (v4)
-try { marked.use({ renderer }); } catch(e) { marked.setOptions({ renderer }); }
+// [v2.1.26] Configurar marked — CDN (v4/v5) o fallback local sin internet
+// Envuelto en try-catch: si algo falla aquí, el resto del script continúa.
+try {
+    const renderer = new marked.Renderer();
+    renderer.link = function(hrefOrToken, title, text) {
+        let href, linkTitle, linkText;
+        if (hrefOrToken && typeof hrefOrToken === 'object') {
+            href = hrefOrToken.href || ''; linkTitle = hrefOrToken.title || ''; linkText = hrefOrToken.text || '';
+        } else {
+            href = hrefOrToken || ''; linkTitle = title || ''; linkText = text || '';
+        }
+        if (href && href.includes('/siaa/ver/')) {
+            const partes = href.split('/siaa/ver/');
+            const nombre = decodeURIComponent(partes[1] || '').replace(/_/g,' ').replace(/\.md$/i,'').toUpperCase();
+            return `<button class="btn-ver-doc" onclick="abrirDoc('${href}','${nombre}')">📖 Ver ${nombre}</button>`;
+        }
+        const t = linkTitle ? ` title="${linkTitle}"` : '';
+        return `<a href="${href}"${t} target="_blank" rel="noopener">${linkText}</a>`;
+    };
+    try { marked.use({ renderer }); } catch(e) { if (marked.setOptions) marked.setOptions({ renderer }); }
+} catch(e) {
+    console.warn('[SIAA] renderer marked omitido:', e.message);
+}
 
 const conversationHistory = [];
 let controller   = null;
@@ -575,23 +737,105 @@ const waitingMessages = [
     'Procesando con IA local...'
 ];
 
+// ── Modo oscuro/claro ──────────────────────────────────────────
+function toggleTheme() {
+    const html = document.documentElement;
+    const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    document.getElementById('theme-toggle').textContent = next === 'dark' ? '☀️' : '🌙';
+    try { sessionStorage.setItem('siaa-theme', next); } catch(_) {}
+}
+(function() {
+    try {
+        const saved = sessionStorage.getItem('siaa-theme');
+        if (saved === 'dark' || saved === 'light') {
+            document.documentElement.setAttribute('data-theme', saved);
+            const btn = document.getElementById('theme-toggle');
+            if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
+        }
+    } catch(_) {}
+})();
+
+// ── Sistema de concurrencia ────────────────────────────────────
+const MAX_SLOTS     = 2;    // MAX_OLLAMA_SIMULTANEOS del proxy
+const AVG_SECS_INIT = 20;
+const respTiempos   = [];
+
+function avgRespTime() {
+    if (respTiempos.length === 0) return AVG_SECS_INIT;
+    const u = respTiempos.slice(-6);
+    return u.reduce((a,b) => a+b, 0) / u.length;
+}
+
+function _svgClock() {
+    return `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+}
+function _svgCheck() {
+    return `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+}
+function _svgList() {
+    return `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`;
+}
+function _svgWarn() {
+    return `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+}
+
+function updateStatusBar(data) {
+    const dot   = document.getElementById('connection-dot');
+    const text  = document.getElementById('connection-text');
+    const pills = document.getElementById('sb-pills');
+    if (!pills) return;
+
+    if (!data || data.estado !== 'ok') {
+        dot.className    = 'error';
+        text.textContent = 'SIAA desconectado';
+        pills.innerHTML  = `<span class="sb-pill pill-error">${_svgWarn()} Sin conexión</span>`;
+        return;
+    }
+
+    const activos = data.usuarios_activos || 0;
+    const enCola  = Math.max(0, activos - MAX_SLOTS);
+    const enProc  = Math.min(activos, MAX_SLOTS);
+    const libre   = Math.max(0, MAX_SLOTS - enProc);
+
+    if (activos === 0) {
+        dot.className    = 'ok';
+        text.textContent = 'SIAA disponible';
+        pills.innerHTML  = `<span class="sb-pill pill-free">${_svgCheck()} Respuesta inmediata</span>`;
+        return;
+    }
+
+    if (enCola === 0) {
+        dot.className    = 'busy';
+        text.textContent = libre > 0 ? 'SIAA disponible' : 'SIAA procesando';
+        const slotLbl   = enProc === 1 ? '1 consulta activa' : `${enProc} activas`;
+        pills.innerHTML  = `<span class="sb-pill pill-busy">${_svgClock()} ${slotLbl}</span>
+            <span class="sb-sep"></span>
+            <span class="sb-pill pill-free">${_svgCheck()} Turno libre</span>`;
+        return;
+    }
+
+    dot.className = 'queued';
+    const espSeg  = Math.round(enCola * avgRespTime());
+    const espTxt  = espSeg < 60 ? `~${espSeg}s` : `~${Math.ceil(espSeg/60)}min`;
+    const colaLbl = enCola === 1 ? '1 antes' : `${enCola} antes`;
+    text.textContent = `SIAA ocupado — ${colaLbl} en cola`;
+    pills.innerHTML  = `<span class="sb-pill pill-full">${MAX_SLOTS}/${MAX_SLOTS} slots</span>
+        <span class="sb-sep"></span>
+        <span class="sb-pill pill-queue">${_svgList()} ${colaLbl} en cola</span>
+        <span class="sb-sep"></span>
+        <span class="sb-pill pill-wait">${_svgClock()} Espera ${espTxt}</span>`;
+}
+
 async function checkConnection() {
-    const dot  = document.getElementById('connection-dot');
-    const text = document.getElementById('connection-text');
-    dot.className    = 'checking';
-    text.textContent = 'Conectando con servidor IA...';
+    const dot = document.getElementById('connection-dot');
+    dot.className = 'checking';
     try {
         const res  = await fetch(`${PROXY_URL}/siaa/status`);
         const data = await res.json();
-        if (data.estado === 'ok') {
-            dot.className    = 'ok';
-            text.textContent = `Servidor IA conectado ✓  |  ${data.total_documentos} documentos indexados`;
-        } else {
-            throw new Error();
-        }
+        updateStatusBar(data);
     } catch {
-        dot.className    = 'error';
-        text.textContent = '⚠ Servidor IA desconectado — Contacte al administrador del sistema';
+        updateStatusBar(null);
     }
 }
 
@@ -815,6 +1059,7 @@ async function query() {
             </div>`;
             document.getElementById('connection-dot').className    = 'error';
             document.getElementById('connection-text').textContent = '⚠ Servidor IA desconectado';
+            updateStatusBar(null);
         }
     } finally {
         clearInterval(waitInterval);
@@ -823,6 +1068,9 @@ async function query() {
         const ahoraBot  = new Date();
         const horaBot   = ahoraBot.toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit'});
         const seg       = ((Date.now() - t_inicio) / 1000).toFixed(1);
+        // Registrar tiempo real para afinar estimaciones de cola
+        respTiempos.push(parseFloat(seg));
+        if (respTiempos.length > 20) respTiempos.shift();
         const metaHTML  = `
             <div class="msg-meta">
                 <span class="meta-hora">${horaBot}</span>
@@ -849,6 +1097,8 @@ async function query() {
         scrollBottom();
         input.focus();
         isQuerying = false;
+        // Actualizar estado inmediatamente — slot liberado
+        checkConnection();
     }
 }
 
@@ -896,7 +1146,38 @@ document.getElementById('userInput').addEventListener('input', function() {
 });
 
 checkConnection();
-setInterval(checkConnection, 60000);
+// Polling adaptativo: 30s en reposo, +8s extra cuando hay actividad
+setInterval(async () => {
+    try {
+        const res  = await fetch(`${PROXY_URL}/siaa/status`);
+        const data = await res.json();
+        updateStatusBar(data);
+        if ((data.usuarios_activos || 0) > 0) {
+            setTimeout(() => checkConnection(), 8000);
+        }
+    } catch { updateStatusBar(null); }
+}, 30000);
+
+// ── Auto-verificación de versión [v2.1.26] ───────────────────
+// Si el servidor reporta una versión distinta a la del HTML cargado
+// en el navegador → recarga forzada, ignorando caché local.
+// Garantiza que todos los equipos en red siempre usen la versión actual.
+const VERSION_ACTUAL = '2.1.27';  // ← debe coincidir con lo que reporta el proxy
+
+async function verificarVersion() {
+    try {
+        const res  = await fetch(`${PROXY_URL}/siaa/status?_=${Date.now()}`);
+        const data = await res.json();
+        const verServidor = (data.version || '').trim();
+        if (verServidor && verServidor !== VERSION_ACTUAL) {
+            // Solo registrar — no recargar para evitar bucle si el proxy tiene versión distinta
+            console.info(`[SIAA] Proxy v${verServidor} | Frontend v${VERSION_ACTUAL}`);
+        }
+    } catch(_) {}
+}
+
+verificarVersion();                          // Al cargar la página
+setInterval(verificarVersion, 5 * 60 * 1000); // Cada 5 minutos
 
 // ══════════════════════════════════════════════════════════════
 //  [v2.1.25] FAQ DRAWER — Funciones

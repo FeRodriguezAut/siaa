@@ -1,52 +1,55 @@
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║           SIAA — Sistema Inteligente de Apoyo Administrativo                 ║
-║           Proxy de Inferencia con RAG — v2.1.27                              ║
-║           Seccional Bucaramanga · Rama Judicial de Colombia                  ║
+║           SIAA — Sistema Inteligente de Apoyo Administrativo                ║
+║           Proxy de Inferencia con RAG — v2.1.27                             ║
+║           Seccional Bucaramanga · Rama Judicial de Colombia                 ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║  ARQUITECTURA GENERAL                                                        ║
-║  ─────────────────────────────────────────────────────────────────────────   ║
+║  ─────────────────────────────────────────────────────────────────────────  ║
 ║  Cliente (Nginx/HTML)                                                        ║
 ║       │                                                                      ║
 ║       ▼                                                                      ║
-║  Flask + Waitress  ←── este archivo (/opt/siaa/siaa_proxy.py)                ║
+║  Flask + Waitress  ←── este archivo (/opt/siaa/siaa_proxy.py)               ║
 ║       │                                                                      ║
-║       ├─ Conversacional → Ollama (respuesta directa, sin RAG)                ║
-║       └─ Documental     → RAG Pipeline → Ollama                              ║
+║       ├─ Conversacional → Ollama (respuesta directa, sin RAG)               ║
+║       └─ Documental     → RAG Pipeline → Ollama                             ║
 ║              │                                                               ║
-║              ├─ Enrutador (detectar_documentos)                              ║
-║              ├─ Extractor de fragmentos (extraer_fragmento)                  ║
-║              └─ Caché LRU (evita re-procesar preguntas frecuentes)           ║
+║              ├─ Enrutador (detectar_documentos)                             ║
+║              ├─ Extractor de fragmentos (extraer_fragmento)                 ║
+║              └─ Caché LRU (evita re-procesar preguntas frecuentes)          ║
 ║                                                                              ║
 ║  STACK TECNOLÓGICO                                                           ║
-║  ─────────────────────────────────────────────────────────────────────────   ║
-║  Servidor   : HP EliteDesk 705 G4 · Ryzen 5 PRO 2600 · 64GB RAM              ║
-║  GPU        : AMD RX 550 4GB (sin aceleración — llama.cpp Vulkan ≈ CPU)      ║
-║  SO         : Fedora 43 · Python 3.14 · Flask + Waitress                     ║
-║  LLM        : qwen2.5:3b via Ollama · GGUF Q4_K_M · ~1.8GB en RAM            ║
-║  Documentos : 59 archivos .md en /opt/siaa/fuentes/ (3 colecciones)          ║
-║               general/ · normativa/ · sierju/                                ║
+║  ─────────────────────────────────────────────────────────────────────────  ║
+║  Servidor   : HP EliteDesk 705 G4 · Ryzen 5 PRO 2600 · 64GB RAM            ║
+║  GPU        : AMD RX 550 4GB (sin aceleración — llama.cpp Vulkan ≈ CPU)     ║
+║  SO         : Fedora 43 · Python 3.14 · Flask + Waitress                    ║
+║  LLM        : qwen2.5:3b via Ollama · GGUF Q4_K_M · ~1.8GB en RAM          ║
+║  Documentos : 65 archivos .md en /opt/siaa/fuentes/ (4 colecciones)         ║
+║               general/ · normativa/ · sierju/ · recursos_humanos/           ║
 ║                                                                              ║
 ║  HISTORIAL DE VERSIONES                                                      ║
-║  ─────────────────────────────────────────────────────────────────────────   ║
-║  v2.1.6  Tokenizador alfanumérico — psaa16, art5, 10476 en índice            ║
-║  v2.1.7  IDF local por chunk — términos raros pesan más                      ║
-║  v2.1.8  num_thread=6, num_batch=512, MAX_DOCS=2                             ║
-║  v2.1.10 TF real (frecuencia en chunk) en puntuar_chunk                      ║
-║  v2.1.11 IDF local + palabras ultra-comunes excluidas (>85% chunks)          ║
-║  v2.1.14 Keywords manuales fijas por documento                               ║
-║  v2.1.15 Query expansion por tipo de pregunta (cuándo/quién/cómo)            ║
-║  v2.1.16 Bono de proximidad "Francotirador" — ventana deslizante 150c        ║
-║  v2.1.17 Detección de preguntas de listado → modo "Escopeta"                 ║ 
-║  v2.1.22 Position bias para preguntas de definición · num_ctx dinámico       ║
-║  v2.1.23 Marcado marked.js v4/v5 compatible · TERMINOS_SIEMPRE_DOCUMENTAL    ║
-║  v2.1.24 CHUNK_SIZE=800, MAX_CHUNKS=3 (restaurado por tiempos 160s)          ║
-║  v2.1.25 Búsqueda por frases exactas · MAX_CHUNKS dinámico docs >80 chunks   ║
+║  ─────────────────────────────────────────────────────────────────────────  ║
+║  v2.1.6  Tokenizador alfanumérico — psaa16, art5, 10476 en índice           ║
+║  v2.1.7  IDF local por chunk — términos raros pesan más                     ║
+║  v2.1.8  num_thread=6, num_batch=512, MAX_DOCS=2                            ║
+║  v2.1.10 TF real (frecuencia en chunk) en puntuar_chunk                     ║
+║  v2.1.11 IDF local + palabras ultra-comunes excluidas (>85% chunks)         ║
+║  v2.1.14 Keywords manuales fijas por documento                              ║
+║  v2.1.15 Query expansion por tipo de pregunta (cuándo/quién/cómo)           ║
+║  v2.1.16 Bono de proximidad "Francotirador" — ventana deslizante 150c       ║
+║  v2.1.17 Detección de preguntas de listado → modo "Escopeta"                ║
+║  v2.1.22 Position bias para preguntas de definición · num_ctx dinámico      ║
+║  v2.1.23 Marcado marked.js v4/v5 compatible · TERMINOS_SIEMPRE_DOCUMENTAL   ║
+║  v2.1.24 CHUNK_SIZE=800, MAX_CHUNKS=3 (restaurado por tiempos 160s)         ║
+║  v2.1.25 Búsqueda por frases exactas · MAX_CHUNKS dinámico docs >80 chunks  ║
 ║           Clarificador de preguntas ambiguas (civil/penal sin especificar)   ║
-║  v2.1.26 Normalización de tildes/diacríticos en tokenizador y búsqueda       ║
+║  v2.1.26 Normalización de tildes/diacríticos en tokenizador y búsqueda      ║
 ║           MIN_FREQ condicional por longitud · endpoint /siaa/debug_tokens    ║
 ║  v2.1.27 Encabezado actualizado · comentarios profesionales completos        ║
 ║           Sin cambios funcionales sobre v2.1.26                              ║
+║  v2.1.28 Nueva colección recursos_humanos (6 docs · Cartilla Laboral 2025)   ║
+║           Calendario Nómina 2026 (Circular DEAJC26-2)                        ║
+║           TERMINOS_SIEMPRE_DOCUMENTAL + KEYWORDS_MANUALES para RRHH          ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 import os, re, json, math, threading, time, requests
@@ -215,7 +218,7 @@ CORS(app)
 
 OLLAMA_URL             = "http://localhost:11434"
 MODEL                  = "qwen2.5:3b"
-VERSION                = "2.1.27"
+VERSION                = "2.1.28"
 
 # ════════════════════════════════════════════════════════════════
 #  MÓDULO 3 — REGISTRO DE CALIDAD (LOG JSONL)
@@ -377,7 +380,7 @@ Responde con cordialidad en español formal.
 Para saludos y preguntas generales sobre ti mismo, responde directamente.
 Recuerda que puedes ayudar con consultas sobre procesos judiciales, administrativos y normativos."""
 
-SYSTEM_DOCUMENTAL = """Eres SIAA, asistente Administrativo de la Seccional Bucaramanga.
+SYSTEM_DOCUMENTAL = """Eres SIAA, asistente judicial de la Seccional Bucaramanga.
 
 TAREA: Responder usando ÚNICAMENTE el contenido de los bloques [DOC:...] que recibirás.
 
@@ -423,7 +426,16 @@ TERMINOS_SIEMPRE_DOCUMENTAL = {
     "inventario", "ingresos", "egresos", "carga laboral", "efectivos",
     "clase de proceso", "apartado", "módulo", "seccion", "sección",
     # Área administrativa general — [v2.1.25]
-    "nomina", "nómina", "bienestar", "talento humano", "vacaciones",
+    "nomina", "nómina", "bienestar",
+    # [v2.1.28] Recursos Humanos
+    "nomina", "nómina", "salario", "prima", "cesantias", "cesantías",
+    "vacaciones", "licencia", "incapacidad", "comision", "comisión",
+    "prestaciones", "seguridad social", "pension", "pensión",
+    "remuneracion", "remuneración", "servidor judicial", "carrera judicial",
+    "permiso remunerado", "licencia maternidad", "licencia paternidad",
+    "retiro servicio", "situacion administrativa", "situación administrativa",
+    "cartilla laboral", "calendario nomina", "fecha pago", "novedades",
+    "prenomina", "prenómina", "deajc26", "recursos humanos", "talento humano", "vacaciones",
     "licencia", "comision", "comisión", "prima", "cesantias",
     "seguridad social", "eps", "pensión", "pension", "contrato",
     "vinculacion", "vinculación", "carrera judicial", "calificación",
@@ -1083,6 +1095,45 @@ def detectar_documentos(pregunta: str, max_docs: int = MAX_DOCS_CONTEXTO) -> lis
             "sancion", "sanción", "incumplimiento", "no reporto", "qué pasa",
             "que pasa", "consecuencia", "disciplinario", "no reportar",
         ],
+        # ── Recursos Humanos — Cartilla Laboral 2025 + Nómina 2026 ──
+        "faq_recursos_humanos.md": [
+            "nomina", "nomina", "salario", "pago", "prima", "vacaciones",
+            "licencia", "permiso", "situacion", "recursos humanos",
+            "cuando paga", "fecha pago", "novedades nomina",
+            "carrera", "servidor", "retiro",
+        ],
+        "calendario_nomina_2026.md": [
+            "calendario", "nomina", "2026", "fecha pago", "fecha limite",
+            "novedades", "prenomina", "enero", "febrero", "marzo", "abril",
+            "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+            "noviembre", "diciembre", "prima servicios", "prima productividad",
+            "prima navidad", "deajc26", "circular nomina", "pago mensual",
+        ],
+        "cap1_estatuto_servidor_judicial.md": [
+            "estatuto", "servidor judicial", "vinculacion", "carrera judicial",
+            "libre nombramiento", "periodo fijo", "requisitos ingreso",
+            "inhabilidades", "impedimentos", "deberes", "derechos",
+            "evaluacion servicios", "retiro servicio", "posesion", "LEAJ",
+        ],
+        "cap2_situaciones_administrativas.md": [
+            "situacion administrativa", "comision servicio", "comision estudios",
+            "licencia remunerada", "licencia no remunerada", "permiso remunerado",
+            "vacaciones", "suspension empleo", "servicio militar",
+            "maternidad", "paternidad", "incapacidad", "calamidad",
+        ],
+        "cap3_salarios_prestaciones.md": [
+            "salario", "prestaciones", "prima servicios", "prima productividad",
+            "prima navidad", "cesantias", "intereses cesantias",
+            "bonificacion servicios", "gastos representacion",
+            "auxilio conectividad", "factores salariales",
+        ],
+        "cap4_seguridad_social.md": [
+            "seguridad social", "pensiones", "salud", "EPS", "ARL",
+            "riesgos laborales", "SENA", "ICBF", "caja compensacion",
+            "aportes parafiscales", "cotizacion pension",
+            "accidente trabajo", "enfermedad profesional",
+        ],
+
     }
 
     # Nivel 1: TF-IDF (auto-generado) + keywords manuales
