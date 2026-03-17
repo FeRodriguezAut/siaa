@@ -1,6 +1,7 @@
 """
-SIAA — Rutas Flask (Fase 4)
-Orquestador: une rag/, llm/ y log en el pipeline completo.
+SIAA — Rutas Flask (Fase 4) v3.0.0
+Formato de streaming: OpenAI-compatible SSE
+{"choices": [{"delta": {"content": "token"}}]}
 """
 import json, os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -12,20 +13,30 @@ from llm.classifier import es_conversacion
 from llm.client     import (chat_stream, verificar, disponible,
                              SYSTEM_CONVERSACIONAL, SYSTEM_DOCUMENTAL)
 from rag.document_store import store
-from rag.router         import detectar        # ← nombre real de la Fase 2
-from rag.extractor      import extraer         # ← nombre real de la Fase 2
+from rag.router         import detectar
+from rag.extractor      import extraer
 
 VERSION     = "3.0.0"
 LOG_ARCHIVO = "/opt/siaa/logs/calidad.jsonl"
 
 PATRONES_LISTADO = [
-    "cuáles son", "cuales son", "qué secciones", "que secciones",
-    "qué campos", "que campos", "qué incluye", "que incluye",
-    "enumera", "enumere", "nombra", "menciona",
+    "cuales son", "que secciones", "que campos",
+    "que incluye", "enumera", "enumere", "nombra", "menciona",
 ]
 
 app = Flask(__name__)
 CORS(app)
+
+
+def _sse_token(tok: str) -> str:
+    """Empaca un token en formato OpenAI-compatible."""
+    payload = {"choices": [{"delta": {"content": tok}, "finish_reason": None}]}
+    return f"data: {json.dumps(payload)}\n\n"
+
+
+def _sse_done() -> str:
+    """Señal de fin de stream — compatible con frontend v2.1.27."""
+    return "data: [DONE]\n\n"
 
 
 def _registrar(pregunta, respuesta, docs, tiempo_s, tipo="DOCUMENTAL"):
@@ -45,11 +56,22 @@ def _registrar(pregunta, respuesta, docs, tiempo_s, tipo="DOCUMENTAL"):
 
 @app.route("/siaa/chat", methods=["POST"])
 def chat():
-    datos     = request.get_json(silent=True) or {}
-    pregunta  = (datos.get("message") or datos.get("pregunta") or "").strip()
-    historial = datos.get("historial", [])
+    datos = request.get_json(silent=True) or {}
+
+    # Formato frontend v2.1.27: {"messages": [{role, content}, ...]}
+    # Formato API directa:      {"message": "texto", "historial": [...]}
+    if "messages" in datos:
+        msgs     = datos.get("messages", [])
+        historial = [m for m in msgs[:-1] if m.get("role") in ("user", "assistant")]
+        ultima   = next((m for m in reversed(msgs) if m.get("role") == "user"), None)
+        pregunta = (ultima or {}).get("content", "").strip()
+    else:
+        pregunta  = (datos.get("message") or "").strip()
+        historial = datos.get("historial", [])
+
     if not pregunta:
-        return jsonify({"error": "Campo 'message' requerido"}), 400
+        return jsonify({"error": "No se encontro pregunta en el body"}), 400
+
     if not disponible():
         verificar()
     t0 = time.time()
@@ -61,17 +83,17 @@ def chat():
             buf = []
             for tok in chat_stream(SYSTEM_CONVERSACIONAL, mensajes):
                 buf.append(tok)
-                yield f"data: {json.dumps({'token': tok})}\n\n"
-            yield "data: [DONE]\n\n"
+                yield _sse_token(tok)
+            yield _sse_done()
             _registrar(pregunta, "".join(buf), [], time.time()-t0, "CONVERSACIONAL")
-        return Response(stream_with_context(_gen_conv()), content_type="text/event-stream")
+        return Response(stream_with_context(_gen_conv()),
+                        content_type="text/event-stream")
 
     # ── Documental (RAG) ─────────────────────────────────────────
-    docs_enc = detectar(pregunta)          # ← antes era detectar_documentos
-    partes   = []
-    nombres  = []
+    docs_enc = detectar(pregunta)
+    partes, nombres = [], []
     for nd in docs_enc:
-        frag = extraer(nd, pregunta)       # ← antes era extraer_fragmento
+        frag = extraer(nd, pregunta)
         if frag:
             partes.append(frag)
             nombres.append(nd)
@@ -85,13 +107,14 @@ def chat():
     def _gen_doc():
         buf = []
         for tok in chat_stream(SYSTEM_DOCUMENTAL, mensajes,
-                               contexto_chars=contexto_chars, es_listado=es_lista):
+                               contexto_chars=contexto_chars,
+                               es_listado=es_lista):
             buf.append(tok)
-            yield f"data: {json.dumps({'token': tok})}\n\n"
-        yield "data: [DONE]\n\n"
+            yield _sse_token(tok)
+        yield _sse_done()
         _registrar(pregunta, "".join(buf), nombres, time.time()-t0)
-
-    return Response(stream_with_context(_gen_doc()), content_type="text/event-stream")
+    return Response(stream_with_context(_gen_doc()),
+                    content_type="text/event-stream")
 
 
 @app.route("/siaa/estado", methods=["GET"])
@@ -105,12 +128,31 @@ def estado():
     })
 
 
+@app.route("/siaa/status", methods=["GET"])
+def status():
+    from collections import Counter
+    docs = store.get_todos_docs()
+    cols = dict(Counter(v.get("coleccion","general") for v in docs.values()))
+    return jsonify({
+        "status": "ok",
+        "estado": "ok",
+        "version": VERSION,
+        "ollama_disponible": disponible(),
+        "warmup_completado": disponible(),
+        "documentos_cargados": len(docs),
+        "colecciones": cols,
+        "usuarios_activos": 0,
+        "cache": {"hit_rate": 0, "entradas": 0},
+    })
+
+
 @app.route("/siaa/enrutar", methods=["GET"])
 def diag_enrutar():
     q = request.args.get("q","").strip()
     if not q:
-        return jsonify({"error": "Parámetro 'q' requerido"}), 400
-    return jsonify({"pregunta": q, "docs": detectar(q)})
+        return jsonify({"error": "Parametro 'q' requerido"}), 400
+    return jsonify({"pregunta": q, "docs": detectar(q),
+                    "docs_encontrados": [{"doc": d} for d in detectar(q)]})
 
 
 @app.route("/siaa/fragmento", methods=["GET"])
@@ -118,9 +160,10 @@ def ver_fragmento():
     doc = request.args.get("doc","")
     q   = request.args.get("q","")
     if not doc or not q:
-        return jsonify({"error": "Parámetros 'doc' y 'q' requeridos"}), 400
+        return jsonify({"error": "Parametros 'doc' y 'q' requeridos"}), 400
     frag = extraer(doc, q)
-    return jsonify({"doc": doc, "pregunta": q, "fragmento": frag, "chars": len(frag)})
+    return jsonify({"doc": doc, "pregunta": q,
+                    "fragmento": frag, "chars": len(frag)})
 
 
 @app.route("/siaa/recargar", methods=["GET"])
