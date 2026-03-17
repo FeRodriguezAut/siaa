@@ -1,8 +1,8 @@
 # SIAA — Sistema Inteligente de Apoyo Administrativo
 
-> Asistente institucional de IA para la **Seccional Bucaramanga de la Rama Judicial de Colombia**.
+> Proyecto Piloto Asistente institucional de IA para la 
 
-[![Estado](https://img.shields.io/badge/estado-producción-green)](https://github.com/FeRodriguezAut/siaa)
+[![Estado]![piloto - beta testing](https://img.shields.io/badge/piloto-beta_testing-green)](https://github.com/FeRodriguezAut/siaa)
 [![Versión](https://img.shields.io/badge/versión-2.1.27-blue)](https://github.com/FeRodriguezAut/siaa)
 [![Modelo](https://img.shields.io/badge/modelo-qwen2.5%3A3b-orange)](https://ollama.com/library/qwen2.5)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://python.org)
@@ -12,7 +12,7 @@
 
 ## ¿Qué es SIAA?
 
-SIAA es un chatbot RAG (Retrieval-Augmented Generation) completamente local que responde preguntas sobre documentos institucionales de la Rama Judicial. Funciona sin internet, sin GPU y está optimizado para hardware de oficina estándar.
+SIAA es un chatbot RAG (Retrieval-Augmented Generation) completamente local que responde preguntas sobre documentos institucionales . Funciona sin internet, sin GPU y está optimizado para hardware de oficina estándar.
 
 - **100% local:** Sin APIs externas. Todos los datos permanecen en el servidor.
 - **RAG inteligente:** Recupera fragmentos precisos de 59 documentos `.md` usando TF-IDF multinivel.
@@ -135,4 +135,4 @@ Documentación online: [ferodriguezaut-siaa.mintlify.app](https://ferodriguezaut
 
 ## Licencia
 
-Uso institucional interno — Rama Judicial de Colombia, Seccional Bucaramanga.
+Uso institucional Piloto interno — .
