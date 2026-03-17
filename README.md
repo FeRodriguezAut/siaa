@@ -2,7 +2,7 @@
 
 > Proyecto Piloto Asistente institucional de IA para la 
 
-[![Estado](https://img.shields.io/badge/piloto-beta_testing-green)](https://github.com/FeRodriguezAut/siaa)
+[![Estado](https://img.shields.io/badge/piloto-beta_testing-orange)](https://github.com/FeRodriguezAut/siaa)
 [![Versión](https://img.shields.io/badge/versión-2.1.27-blue)](https://github.com/FeRodriguezAut/siaa)
 [![Modelo](https://img.shields.io/badge/modelo-qwen2.5%3A3b-orange)](https://ollama.com/library/qwen2.5)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://python.org)
