@@ -36,3 +36,9 @@ Documentos_MD/
 pdfs_origen/
 img/
 __pycache__/
+
+# Archivos basura generados por pegado accidental en bash
+requests
+threading
+time
+import
