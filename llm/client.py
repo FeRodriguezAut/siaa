@@ -1,13 +1,13 @@
 """
-SIAA — Cliente LLM para Ollama (Fase 3)
-num_thread=6, num_batch=512, temperatura=0.0, num_ctx dinamico.
+SIAA — Cliente LLM para Ollama v3.0.1
+Optimizado para qwen2.5:3b con contextos documentales.
 """
 import json, requests, threading, time
 
-OLLAMA_URL  = "http://localhost:11434"
-MODEL       = "qwen2.5:3b"
+OLLAMA_URL        = "http://localhost:11434"
+MODEL             = "qwen2.5:3b"
 TIMEOUT_CONEXION  = 8
-TIMEOUT_RESPUESTA = 180
+TIMEOUT_RESPUESTA = 120
 TIMEOUT_HEALTH    = 5
 
 _semaforo = threading.Semaphore(2)
@@ -16,39 +16,32 @@ _estado   = {"disponible": False, "ultimo_check": 0.0, "warmup_hecho": False}
 
 STOP_SEQUENCES = [
     "\n\n\n", "Espero que", "Es importante destacar",
-    "Cabe destacar que", "En conclusion,", "Por otro lado,", "Cabe mencionar"
+    "Cabe destacar que", "En conclusion,", "Por otro lado,",
+    "Cabe mencionar", "I hope", "The document", "Please note"
 ]
 
-SYSTEM_CONVERSACIONAL = """Eres SIAA (Sistema Inteligente de Apoyo Administrativo), el asistente oficial de la Seccional Bucaramanga de la Rama Judicial de Colombia.
+SYSTEM_CONVERSACIONAL = """Eres SIAA, asistente oficial de la Seccional Bucaramanga de la Rama Judicial de Colombia.
+Responde siempre en español formal y cordial.
+Para saludos y preguntas generales responde directamente y brevemente."""
 
-SIAA significa exactamente: "Sistema Inteligente de Apoyo Administrativo". No significa nada mas.
+SYSTEM_DOCUMENTAL = """Eres SIAA, asistente judicial de la Seccional Bucaramanga. Respondes SIEMPRE en español.
 
-Responde con cordialidad en español formal.
-Para saludos y preguntas generales sobre ti mismo, responde directamente.
-Recuerda que puedes ayudar con consultas sobre procesos judiciales, administrativos y normativos."""
+INSTRUCCION: Usa SOLO la informacion de los bloques [DOC:...] para responder.
 
-SYSTEM_DOCUMENTAL = """Eres SIAA, asistente judicial de la Seccional Bucaramanga.
-
-TAREA: Responder usando UNICAMENTE el contenido de los bloques [DOC:...] que recibiras.
-
-PROCESO OBLIGATORIO:
-1. Lee cada bloque [DOC:...] completo.
-2. Identifica que partes se relacionan con la pregunta, aunque sea parcialmente.
-3. Construye la respuesta con esos fragmentos relevantes.
-4. Si encontraste informacion aunque sea parcial, responde con ella.
-5. Solo si el contexto es completamente ajeno al tema responde: "No encontre esa informacion en los documentos disponibles."
-
-REGLAS:
-- Cita literalmente articulos, campos, fechas, roles y valores numericos.
-- Nunca inventes informacion que no este en el contexto.
-- Español formal institucional. Sin preambulos. Maximo 10 lineas."""
+REGLAS ESTRICTAS:
+- SIEMPRE responde en español formal institucional
+- Cita articulos, fechas, plazos y valores exactos del documento
+- Si el documento no tiene la informacion exacta, di lo que SI tiene relacionado
+- Maximo 8 lineas de respuesta
+- NUNCA respondas en ingles
+- NUNCA inventes informacion"""
 
 
 def _num_ctx_dinamico(contexto_chars: int) -> int:
     tokens_est = contexto_chars / 4
-    if tokens_est < 400:
+    if tokens_est < 300:
         return 1024
-    elif tokens_est < 900:
+    elif tokens_est < 700:
         return 2048
     return 3072
 
@@ -56,7 +49,7 @@ def _num_ctx_dinamico(contexto_chars: int) -> int:
 def _opciones(contexto_chars: int, es_listado: bool = False) -> dict:
     return {
         "temperature":    0.0,
-        "num_predict":    300 if es_listado else 150,
+        "num_predict":    350 if es_listado else 200,
         "num_ctx":        _num_ctx_dinamico(contexto_chars),
         "num_thread":     6,
         "num_batch":      512,
@@ -135,7 +128,7 @@ def chat_stream(system: str, mensajes: list, contexto_chars: int = 0,
                 except Exception:
                     continue
         except requests.exceptions.Timeout:
-            yield "\n\n[SIAA: tiempo de respuesta excedido]"
+            yield "\n\n[SIAA: tiempo de respuesta excedido — intente de nuevo]"
         except Exception as e:
             yield f"\n\n[SIAA: error de conexion — {e}]"
 

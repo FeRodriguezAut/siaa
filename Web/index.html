@@ -499,6 +499,15 @@
         }
         .btn-ver-doc:hover { background: #243580; transform: scale(1.02); }
         #stopBtn:hover { background: #991818; }
+        .siaa-fuentes { margin-top: 14px; border-top: 1px solid rgba(0,0,0,0.07); padding-top: 10px; }
+        .siaa-fuentes-titulo { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; }
+        .siaa-fuente-item { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; background: #f8faff; border: 0.5px solid #dde8f5; border-radius: 8px; margin-bottom: 5px; }
+        .siaa-fuente-info { display: flex; align-items: center; gap: 9px; }
+        .siaa-fuente-num { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #1a3a8f; color: white; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+        .siaa-fuente-nombre { font-size: 12px; font-weight: 600; color: #1e293b; }
+        .siaa-fuente-col { font-size: 10px; color: #94a3b8; margin-top: 1px; }
+        .siaa-fuente-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; border: 1px solid #1a3a8f; background: transparent; color: #1a3a8f; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all .15s; }
+        .siaa-fuente-btn:hover { background: #1a3a8f; color: white; }
     </style>
 </head>
 <body>
@@ -698,7 +707,7 @@
 
 <script>
 const SERVER_HOST = window.location.hostname || '172.16.62.103';
-const PROXY_URL   = `http://${SERVER_HOST}:5000`;
+const PROXY_URL   = `http://${SERVER_HOST}:5001`;
 
 // [v2.1.26] Configurar marked — CDN (v4/v5) o fallback local sin internet
 // Envuelto en try-catch: si algo falla aquí, el resto del script continúa.
@@ -1022,7 +1031,10 @@ async function query() {
                 if (!clean || clean === 'data: [DONE]') continue;
                 try {
                     const raw = clean.startsWith('data: ') ? clean.slice(6) : clean;
-                    const tok = JSON.parse(raw).choices?.[0]?.delta?.content;
+                    const parsed = JSON.parse(raw);
+                    // Capturar evento sources
+                    if (parsed.sources) { window._siaa_sources = parsed.sources; continue; }
+                    const tok = parsed.choices?.[0]?.delta?.content;
                     if (tok) {
                         // Colapsar thinking panel al primer token real
                         if (accumulated === '' && thinkingPanel) {
@@ -1043,6 +1055,25 @@ async function query() {
             }
         }
 
+        // ── Procesar evento sources si llegó ──────────────────────
+        if (window._siaa_sources && window._siaa_sources.length > 0) {
+            const fuentes = window._siaa_sources;
+            let html = '<div class="siaa-fuentes"><div class="siaa-fuentes-titulo">Fuentes consultadas</div>';
+            fuentes.forEach(f => {
+                const icono = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>';
+                html += \`<div class="siaa-fuente-item">
+                  <div class="siaa-fuente-info">
+                    <span class="siaa-fuente-num">\${f.n}</span>
+                    <div><div class="siaa-fuente-nombre">\${f.nombre}</div>
+                    <div class="siaa-fuente-col">\${f.coleccion}</div></div>
+                  </div>
+                  <button class="siaa-fuente-btn" onclick="abrirDoc('\${f.url}','\${f.nombre}')">\${icono} Ver documento</button>
+                </div>\`;
+            });
+            html += '</div>';
+            target.innerHTML += html;
+            window._siaa_sources = null;
+        }
         if (accumulated) {
             conversationHistory.push({ role: 'assistant', content: accumulated });
             if (conversationHistory.length > 20) conversationHistory.splice(0, 2);

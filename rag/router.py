@@ -137,3 +137,45 @@ def detectar(pregunta: str, max_docs: int = MAX_DOCS_CONTEXTO) -> list[str]:
 KEYWORDS_MANUALES["faq_acuerdo_psaa16-10476.md"].extend([
     "psaa16", "psaa", "10476", "psaa16-10476",
 ])
+
+# ── Keywords manuales RRHH ───────────────────────────────────────
+# Agregadas porque el router no detectaba estas preguntas frecuentes
+# del banco de preguntas de los 26 despachos.
+KEYWORDS_MANUALES["faq_recursos_humanos.md"] = [
+    # Certificaciones
+    "certificacion ingresos", "certificado ingresos", "certificacion laboral",
+    "certificado laboral", "certificacion salarial", "constancia laboral",
+    "certificar ingresos", "carta laboral",
+    # Vacaciones
+    "solicitar vacaciones", "como pedir vacaciones", "dias de vacaciones",
+    "disfrute vacaciones", "vacaciones judiciales", "periodo vacacional",
+    # Licencias
+    "licencia maternidad", "licencia paternidad", "licencia no remunerada",
+    "licencia remunerada", "como solicitar licencia", "tipos de licencia",
+    # Permisos
+    "permiso remunerado", "permiso sindical", "como solicitar permiso",
+    "dias de permiso",
+    # Nomina y salario
+    "cuando se paga", "fecha pago nomina", "pago salario",
+    "como se liquida", "liquidacion cesantias", "cesantias",
+    # Prima
+    "prima servicios", "prima productividad", "prima navidad",
+    "prima vacaciones", "como se calcula prima", "calculo prima",
+    # Posesion y vinculacion
+    "posesionarse cargo", "documentos posesion", "vinculacion judicial",
+    "requisitos posesion", "como posesionarse",
+    # Evaluacion
+    "evaluacion desempeno", "calificacion servicios", "como evaluan",
+    "proceso evaluacion",
+    # Traslados
+    "solicitar traslado", "traslado judicial", "como pedir traslado",
+    # Bienestar
+    "bienestar judicial", "programas bienestar", "actividades bienestar",
+    "beneficios servidor judicial",
+    # Seguridad social
+    "eps judicial", "pension judicial", "seguridad social rama",
+    "afiliacion eps", "caja compensacion",
+    # Escalafon
+    "escalafon judicial", "carrera judicial", "ascenso judicial",
+    "categoria judicial",
+]
