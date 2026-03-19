@@ -275,72 +275,72 @@
         }
         @keyframes fadeLabel { from { opacity:0; transform:translateX(-4px); } to { opacity:1; transform:translateX(0); } }
 
-        /* Panel de "thinking" — muestra los documentos encontrados */
+        /* ── Panel fuentes unificado (Opción C) ───────────────────── */
         .thinking-panel {
-            background: #f8faff;
-            border: 1px solid #dce3f0;
-            border-left: 3px solid var(--judicial-gold);
+            border: 0.5px solid #dde8f5;
             border-radius: 8px;
-            padding: 10px 14px;
-            margin-bottom: 8px;
-            font-size: 0.78rem;
-            color: #475569;
-            animation: fadeLabel 0.3s ease;
-        }
-        .thinking-panel .thinking-title {
-            font-weight: 700;
-            color: var(--judicial-blue);
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            margin-bottom: 6px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .thinking-panel .thinking-doc {
-            display: flex;
-            align-items: flex-start;
-            gap: 6px;
-            margin: 3px 0;
-            line-height: 1.4;
-        }
-        .thinking-panel .thinking-doc::before {
-            content: "📄";
-            flex-shrink: 0;
-        }
-        .thinking-panel .thinking-excerpt {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 4px;
-            padding: 6px 10px;
-            margin-top: 6px;
-            font-style: italic;
-            font-size: 0.75rem;
-            color: #64748b;
-            max-height: 60px;
+            margin-bottom: 10px;
             overflow: hidden;
-            position: relative;
+            font-size: 0.78rem;
         }
-        .thinking-panel .thinking-excerpt::after {
-            content: "";
-            position: absolute;
-            bottom: 0; left: 0; right: 0;
-            height: 20px;
-            background: linear-gradient(transparent, white);
+        .thinking-panel summary {
+            display: flex; align-items: center; gap: 7px;
+            padding: 7px 12px;
+            background: #f0f4fb;
+            border-bottom: 0.5px solid #dde8f5;
+            cursor: pointer; list-style: none;
+            font-size: 10px; font-weight: 600;
+            color: #475569; letter-spacing: .06em;
+            text-transform: uppercase; user-select: none;
         }
-        /* Colapsar el panel al llegar la respuesta */
-        .thinking-panel.collapsed {
-            padding: 6px 14px;
-            cursor: pointer;
-            opacity: 0.6;
+        .thinking-panel summary::-webkit-details-marker { display: none; }
+        .thinking-panel summary .tp-chevron {
+            margin-left: auto; transition: transform .2s;
         }
-        .thinking-panel.collapsed .thinking-excerpt,
-        .thinking-panel.collapsed .thinking-doc { display: none; }
-        .thinking-panel.collapsed .thinking-title::after {
-            content: " (click para expandir)";
-            font-weight: 400;
-            font-size: 0.7rem;
-            color: #94a3b8;
+        .thinking-panel[open] summary .tp-chevron {
+            transform: rotate(180deg);
+        }
+        .thinking-panel .tp-body {
+            padding: 8px 10px; display: flex;
+            flex-direction: column; gap: 5px;
+            background: white;
+        }
+        .thinking-doc {
+            display: flex; align-items: center;
+            justify-content: space-between;
+            padding: 6px 10px;
+            background: #f8faff;
+            border: 0.5px solid #dde8f5;
+            border-radius: 6px;
+        }
+        .thinking-doc-info {
+            display: flex; align-items: center; gap: 8px;
+        }
+        .thinking-doc-num {
+            width: 18px; height: 18px; border-radius: 50%;
+            background: #1a3a8f; color: white;
+            font-size: 9px; font-weight: 700;
+            display: inline-flex; align-items: center;
+            justify-content: center; flex-shrink: 0;
+        }
+        .thinking-doc-nombre {
+            font-size: 12px; font-weight: 500; color: #1e293b;
+        }
+        .thinking-doc-col {
+            font-size: 10px; color: #94a3b8; margin-top: 1px;
+        }
+        .thinking-doc-btn {
+            display: inline-flex; align-items: center; gap: 3px;
+            padding: 3px 9px; border-radius: 5px;
+            border: 0.5px solid #1a3a8f; background: transparent;
+            color: #1a3a8f; font-size: 11px; font-weight: 500;
+            cursor: pointer; white-space: nowrap;
+            transition: all .15s;
+        }
+        .thinking-doc-btn:hover { background: #1a3a8f; color: white; }
+        /* Estado cargando — sin docs aún */
+        .thinking-panel.loading summary {
+            background: #f0f4fb; color: #94a3b8;
         }
         .input-group { display: flex; gap: 10px; max-width: 1100px; margin: 0 auto; align-items: flex-end; }
         textarea#userInput {
@@ -499,6 +499,23 @@
         }
         .btn-ver-doc:hover { background: #243580; transform: scale(1.02); }
         #stopBtn:hover { background: #991818; }
+        .rating-bar {
+            display: flex; align-items: center; gap: 8px;
+            margin-top: 10px; padding-top: 8px;
+            border-top: 0.5px solid rgba(0,0,0,0.07);
+        }
+        .rating-label { font-size: 11px; color: #94a3b8; }
+        .rating-btn {
+            display: inline-flex; align-items: center; gap: 3px;
+            padding: 3px 10px; border-radius: 20px;
+            border: 0.5px solid var(--color-border, #dde3ed);
+            background: transparent; cursor: pointer;
+            font-size: 12px; color: #64748b;
+            transition: all .15s;
+        }
+        .rating-btn:hover { border-color: #1a3a8f; color: #1a3a8f; }
+        .rating-btn.positivo { border-color: #16a34a; color: #16a34a; background: #f0fdf4; }
+        .rating-btn.negativo { border-color: #dc2626; color: #dc2626; background: #fef2f2; }
         .siaa-fuentes { margin-top: 14px; border-top: 1px solid rgba(0,0,0,0.07); padding-top: 10px; }
         .siaa-fuentes-titulo { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; }
         .siaa-fuente-item { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; background: #f8faff; border: 0.5px solid #dde8f5; border-radius: 8px; margin-bottom: 5px; }
@@ -706,8 +723,7 @@
 </div>
 
 <script>
-const SERVER_HOST = window.location.hostname || '172.16.62.103';
-const PROXY_URL   = `http://${SERVER_HOST}:5001`;
+const PROXY_URL = '';
 
 // [v2.1.26] Configurar marked — CDN (v4/v5) o fallback local sin internet
 // Envuelto en try-catch: si algo falla aquí, el resto del script continúa.
@@ -990,15 +1006,8 @@ async function query() {
             // Insertar panel thinking ANTES de los puntos animados
             const botLoading = bubble.querySelector('.bot-loading');
             if (botLoading) {
-                thinkingPanel = document.createElement('div');
-                thinkingPanel.className = 'thinking-panel';
-                thinkingPanel.innerHTML = `
-                    <div class="thinking-title">🔍 Buscando en documentos</div>
-                    ${docsHtml}
-                    ${excerptHtml}
-                `;
-                bubble.insertBefore(thinkingPanel, botLoading);
-                scrollBottom();
+                // Guardar docs para renderizar al FINAL de la respuesta
+                window._siaa_docs_panel = docs;
             }
         }
     } catch(_) {
@@ -1032,17 +1041,13 @@ async function query() {
                 try {
                     const raw = clean.startsWith('data: ') ? clean.slice(6) : clean;
                     const parsed = JSON.parse(raw);
+                    // Limpiar panel si es respuesta conversacional
+                    if (parsed.no_docs) { window._siaa_docs_panel = null; continue; }
                     // Capturar evento sources
                     if (parsed.sources) { window._siaa_sources = parsed.sources; continue; }
                     const tok = parsed.choices?.[0]?.delta?.content;
                     if (tok) {
-                        // Colapsar thinking panel al primer token real
-                        if (accumulated === '' && thinkingPanel) {
-                            thinkingPanel.classList.add('collapsed');
-                            thinkingPanel.title = 'Click para ver documentos consultados';
-                            thinkingPanel.querySelector('.thinking-title').textContent = '🔍 Documentos consultados';
-                            thinkingPanel.onclick = () => thinkingPanel.classList.toggle('collapsed');
-                        }
+                        // primer token recibido
                         accumulated += tok;
                         target.innerHTML = (thinkingPanel ? thinkingPanel.outerHTML : '')
                             + procesarFuente(marked.parse(accumulated));
@@ -1055,24 +1060,69 @@ async function query() {
             }
         }
 
-        // ── Procesar evento sources si llegó ──────────────────────
-        if (window._siaa_sources && window._siaa_sources.length > 0) {
-            const fuentes = window._siaa_sources;
-            let html = '<div class="siaa-fuentes"><div class="siaa-fuentes-titulo">Fuentes consultadas</div>';
-            fuentes.forEach(f => {
-                const icono = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>';
-                html += \`<div class="siaa-fuente-item">
-                  <div class="siaa-fuente-info">
-                    <span class="siaa-fuente-num">\${f.n}</span>
-                    <div><div class="siaa-fuente-nombre">\${f.nombre}</div>
-                    <div class="siaa-fuente-col">\${f.coleccion}</div></div>
-                  </div>
-                  <button class="siaa-fuente-btn" onclick="abrirDoc('\${f.url}','\${f.nombre}')">\${icono} Ver documento</button>
-                </div>\`;
-            });
-            html += '</div>';
-            target.innerHTML += html;
-            window._siaa_sources = null;
+        // ── Renderizar panel fuentes al FINAL de la respuesta ─────
+        if (window._siaa_docs_panel && window._siaa_docs_panel.length > 0) {
+            const docs = window._siaa_docs_panel;
+            const icono = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>';
+            const chevron = '<svg class="tp-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6,9 12,15 18,9"/></svg>';
+            const docsItemsHtml = docs.map(function(d, i) {
+                const nombre = d.doc.replace(/_/g,' ').replace('.md','')
+                    .replace(/(?:^|\s)\w/g, function(c){ return c.toUpperCase(); });
+                const col = d.coleccion || 'general';
+                const url = '/siaa/ver/' + d.doc;
+                return '<div class="thinking-doc">'
+                    + '<div class="thinking-doc-info">'
+                    + '<span class="thinking-doc-num">' + (i+1) + '</span>'
+                    + '<div><div class="thinking-doc-nombre">' + nombre + '</div>'
+                    + '<div class="thinking-doc-col">' + col + '</div></div>'
+                    + '</div>'
+                    + '<button class="thinking-doc-btn" onclick="abrirDoc(\'' + url + '\',\'' + nombre + '\')">'
+                    + icono + ' Ver</button>'
+                    + '</div>';
+            }).join('');
+            const panelHTML = '<details class="thinking-panel" open>'
+                + '<summary>'
+                + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'
+                + docs.length + ' documento' + (docs.length > 1 ? 's' : '') + ' consultado' + (docs.length > 1 ? 's' : '')
+                + chevron + '</summary>'
+                + '<div class="tp-body">' + docsItemsHtml + '</div>'
+                + '</details>';
+            target.innerHTML += panelHTML;
+            window._siaa_docs_panel = null;
+        }
+        // ── Botones de calificación ──────────────────────────────
+        if (accumulated) {
+            const ratingBar = document.createElement('div');
+            ratingBar.className = 'rating-bar';
+            const preguntaSnap = text;
+            const respuestaSnap = accumulated;
+            const docsSnap = window._siaa_last_docs || [];
+            ratingBar.innerHTML = '<span class="rating-label">¿Fue útil esta respuesta?</span>';
+            const btnPos = document.createElement('button');
+            btnPos.className = 'rating-btn';
+            btnPos.innerHTML = '&#128077; Sí';
+            const btnNeg = document.createElement('button');
+            btnNeg.className = 'rating-btn';
+            btnNeg.innerHTML = '&#128078; No';
+            btnPos.onclick = function() {
+                btnPos.classList.add('positivo'); btnNeg.disabled = true;
+                fetch(PROXY_URL + '/siaa/rating', {method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({pregunta: preguntaSnap,
+                        respuesta: respuestaSnap, rating: 1, docs: docsSnap})});
+            };
+            btnNeg.onclick = function() {
+                btnNeg.classList.add('negativo'); btnPos.disabled = true;
+                const motivo = prompt('¿Qué estuvo mal? (opcional)') || '';
+                fetch(PROXY_URL + '/siaa/rating', {method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({pregunta: preguntaSnap,
+                        respuesta: respuestaSnap, rating: -1,
+                        comentario: motivo, docs: docsSnap})});
+            };
+            ratingBar.appendChild(btnPos);
+            ratingBar.appendChild(btnNeg);
+            target.appendChild(ratingBar);
         }
         if (accumulated) {
             conversationHistory.push({ role: 'assistant', content: accumulated });
@@ -1084,9 +1134,11 @@ async function query() {
             target.innerHTML = (accumulated ? procesarFuente(marked.parse(accumulated)) : '') +
                 '<br><em style="color:#94a3b8;font-size:.85em;">[Consulta cancelada]</em>';
         } else {
+            console.error('[SIAA] Error capturado:', err.name, err.message, err.stack);
             target.innerHTML = `<div style="color:#b91c1c;">
                 <strong>⚠ Error de conexión</strong><br>
-                Verifique que el servidor proxy esté activo.
+                Verifique que el servidor proxy esté activo.<br>
+                <small style="color:#94a3b8">${err.name}: ${err.message}</small>
             </div>`;
             document.getElementById('connection-dot').className    = 'error';
             document.getElementById('connection-text').textContent = '⚠ Servidor IA desconectado';
