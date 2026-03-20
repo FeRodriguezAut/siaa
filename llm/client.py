@@ -12,6 +12,7 @@ TIMEOUT_HEALTH    = 5
 
 _semaforo = threading.Semaphore(2)
 _lock     = threading.Lock()
+_activos  = 0          # ← agregar esta línea
 _estado   = {"disponible": False, "ultimo_check": 0.0, "warmup_hecho": False}
 
 STOP_SEQUENCES = [
@@ -117,7 +118,10 @@ def chat_stream(system: str, mensajes: list, contexto_chars: int = 0,
         "stream":   True,
         "options":  _opciones(contexto_chars, es_listado),
     }
+    global _activos
     with _semaforo:
+        with _lock:
+            _activos += 1
         try:
             resp = requests.post(
                 f"{OLLAMA_URL}/api/chat",
@@ -140,8 +144,16 @@ def chat_stream(system: str, mensajes: list, contexto_chars: int = 0,
             yield "\n\n[SIAA: tiempo de respuesta excedido — intente de nuevo]"
         except Exception as e:
             yield f"\n\n[SIAA: error de conexion — {e}]"
+        finally:
+            with _lock:
+                _activos -= 1
 
 
 def chat_completo(system: str, mensajes: list,
                   contexto_chars: int = 0, es_listado: bool = False) -> str:
     return "".join(chat_stream(system, mensajes, contexto_chars, es_listado))
+
+def get_activos() -> int:
+    """Devuelve el número de slots LLM actualmente ocupados."""
+    with _lock:
+        return _activos
