@@ -179,3 +179,20 @@ KEYWORDS_MANUALES["faq_recursos_humanos.md"] = [
     "escalafon judicial", "carrera judicial", "ascenso judicial",
     "categoria judicial",
 ]
+
+# ── Keywords para preguntas sobre el sistema SIAA ───────────────
+KEYWORDS_MANUALES["sierju_faq_general.md"] = [
+    "que es siaa", "para que sirve siaa", "siaa significa",
+    "sistema inteligente", "apoyo administrativo",
+    "que hace siaa", "como funciona siaa",
+]
+
+# ── Keywords prestaciones sociales → cap3 ───────────────────────
+KEYWORDS_MANUALES["cap3_salarios_prestaciones.md"] = [
+    "cesantias", "cesantías", "cuando se pagan cesantias",
+    "liquidacion cesantias", "intereses cesantias",
+    "prima servicios calculo", "como se calcula prima",
+    "calculo liquidacion", "liquidacion definitiva",
+    "auxilio cesantias", "fondo cesantias",
+    "cuando pagan cesantias", "fecha pago cesantias",
+]

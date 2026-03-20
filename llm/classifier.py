@@ -11,6 +11,8 @@ PATRONES_CONVERSACION = [
     "quién eres", "quien eres", "qué es siaa", "que es siaa",
     "qué significa siaa", "que significa siaa",
     "para qué sirves", "para que sirves",
+    "qué es siaa", "que es siaa", "qué significa siaa", "que significa siaa",
+    "para qué sirve siaa", "para que sirve siaa", "quién eres siaa",
     "ok", "bien", "entendido", "de acuerdo", "claro", "perfecto", "listo",
 ]
 
