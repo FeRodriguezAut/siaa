@@ -182,9 +182,22 @@ KEYWORDS_MANUALES["faq_recursos_humanos.md"] = [
 
 # ── Keywords para preguntas sobre el sistema SIAA ───────────────
 KEYWORDS_MANUALES["sierju_faq_general.md"] = [
-    "que es siaa", "para que sirve siaa", "siaa significa",
-    "sistema inteligente", "apoyo administrativo",
-    "que hace siaa", "como funciona siaa",
+    # Contenido real del doc — preguntas FAQ SIERJU generales
+    "udae", "unidad de desarrollo", "analisis estadistico",
+    "que es la udae", "para que sirve la udae",
+    "sancion", "sanciones", "incumplimiento", "no reportar",
+    "que pasa si no reporto", "consecuencias", "disciplinario",
+    "administrador seccional", "que hace el administrador",
+    "deberes administrador", "rol administrador",
+    "salas administrativas", "responsabilidades salas",
+    "deberes funcionario", "deberes del funcionario",
+    "cuando reportar", "plazo reporte", "cinco dias habiles",
+    "periodicidad", "frecuencia reporte",
+    "problema tecnico sierju", "falla tecnica",
+    "quien capacita", "capacitacion sierju",
+    "informacion publica", "es publica",
+    "corregir error", "como corrijo", "error sierju",
+    "roles sierju", "super administrador",
 ]
 
 # ── Keywords prestaciones sociales → cap3 ───────────────────────

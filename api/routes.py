@@ -9,13 +9,13 @@ from flask import Flask, Response, request, stream_with_context, jsonify
 from flask_cors import CORS
 
 from llm.classifier import es_conversacion
-from llm.client     import (chat_stream, verificar, disponible,
+from llm.client     import (chat_stream, verificar, disponible, get_activos as _get_activos,
                              SYSTEM_CONVERSACIONAL, SYSTEM_DOCUMENTAL)
 from rag.document_store import store
 from rag.router         import detectar
 from rag.extractor      import extraer
 
-VERSION      = "3.0.2"
+VERSION      = "3.1.0-alpha"
 LOG_ARCHIVO  = "/opt/siaa/logs/calidad.jsonl"
 MAX_CONTEXTO = 3000   # chars maximos al modelo — qwen2.5:3b se pierde con mas
 
@@ -208,7 +208,7 @@ def status():
         "warmup_completado": disponible(),
         "documentos_cargados": len(docs),
         "colecciones": cols,
-        "usuarios_activos": 0,
+        "usuarios_activos": _get_activos(),
         "cache": {"hit_rate":0,"entradas":0},
     })
 

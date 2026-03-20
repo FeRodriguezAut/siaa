@@ -117,7 +117,7 @@
         .texto-header h2   { margin: 0 0 2px 0; font-size: 1.35rem; letter-spacing: 2px; font-weight: 700; }
         .texto-header span { color: var(--judicial-gold); font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; }
         .version-badge { font-size: 0.65rem; color: rgba(255,255,255,0.5); letter-spacing: 1px; text-align: right; margin-top: 2px; }
-        /* ── STATUS BAR — CONCURRENCIA [v2.1.27] ──────────────── */
+        /* ── STATUS BAR — CONCURRENCIA [v3.1.0-alpha] ──────────────── */
         #status-bar {
             background: var(--status-bg);
             border-bottom: 1px solid var(--border);
@@ -536,7 +536,7 @@
         <div class="texto-header" style="text-align:right;">
             <h2>SIAA</h2>
             <span>SECCIONAL BUCARAMANGA</span>
-            <div class="version-badge">v2.1.27</div>
+            <div class="version-badge">v3.1.0-alpha</div>
         </div>
         <img src="img/Escudo-rama.png" class="escudo-rama" alt="Rama Judicial" onerror="this.style.display='none'">
     </div>
@@ -563,10 +563,8 @@
                 <div style="font-size:.9rem; color:#334155; line-height:1.6;">
                     Soy el <strong>Sistema Inteligente de Apoyo Administrativo</strong> de la Seccional Bucaramanga,
                     Rama Judicial de Colombia.<br>
-                    Estoy aquí para apoyarle en todas las áreas de la seccional:
-                    <strong>Recursos Humanos</strong> (nómina, vacaciones, licencias, bienestar, carrera judicial),
-                    <strong>estadísticas judiciales</strong> (SIERJU), <strong>normativa vigente</strong>,
-                    procesos administrativos internos y documentación institucional.<br>
+                    Estoy aquí para apoyarle en <strong>Recursos Humanos</strong>: nómina, vacaciones, licencias, cesantías, prima de servicios, carrera judicial y situaciones administrativas.
+                    También puedo orientarle sobre <strong>SIERJU</strong> y normativa institucional.<br>
                     <span style="font-size:.83rem; color:#64748b;">
                         Mi base de conocimiento crece continuamente con los documentos de la seccional.
                     </span>
@@ -593,11 +591,7 @@
 
                     <!-- Pestañas — orden: RR.HH · SIERJU · Normativa · Juzgados · Administrativo -->
                     <div style="display:flex; background:#f8faff; border-bottom:1px solid #dce3f0; overflow-x:auto;">
-                        <button class="faq-tab active" onclick="cambiarTab('rrhh', this)">👥 RR.HH</button>
-                        <button class="faq-tab" onclick="cambiarTab('sierju', this)">📊 SIERJU</button>
-                        <button class="faq-tab" onclick="cambiarTab('normativa', this)">📜 Normativa</button>
-                        <button class="faq-tab" onclick="cambiarTab('juzgados', this)">⚖️ Juzgados</button>
-                        <button class="faq-tab" onclick="cambiarTab('administrativo', this)">🏛️ Administrativo</button>
+                        <button class="faq-tab active" onclick="cambiarTab('rrhh', this)">👥 Recursos Humanos</button>
                     </div>
 
                     <!-- Contenido scrollable -->
@@ -612,7 +606,6 @@
                             <button class="faq-item" onclick="enviarFAQ('¿Cuándo se pagan las cesantías en la Rama Judicial?')">¿Cuándo se pagan las cesantías?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Cómo se liquidan las vacaciones en la Rama Judicial?')">¿Cómo se liquidan las vacaciones?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Qué descuentos aparecen en el desprendible de pago?')">¿Qué descuentos aparecen en el desprendible?</button>
-                            <button class="faq-item" onclick="enviarFAQ('¿Cómo solicitar un certificado de ingresos y retenciones?')">¿Cómo solicitar certificado de ingresos?</button>
                             <div class="faq-seccion-titulo" style="margin-top:8px;">👥 Vacaciones y Licencias</div>
                             <button class="faq-item" onclick="enviarFAQ('¿Cuántos días de vacaciones tiene un empleado de la Rama Judicial?')">¿Cuántos días de vacaciones corresponden?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Cómo se solicita el disfrute de vacaciones en la Rama Judicial?')">¿Cómo solicitar vacaciones?</button>
@@ -620,11 +613,7 @@
                             <button class="faq-item" onclick="enviarFAQ('¿Cómo solicitar una licencia de maternidad o paternidad?')">¿Cómo solicitar licencia de maternidad/paternidad?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Qué es una comisión de servicios en la Rama Judicial?')">¿Qué es una comisión de servicios?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Cómo solicitar un permiso remunerado?')">¿Cómo solicitar un permiso remunerado?</button>
-                            <div class="faq-seccion-titulo" style="margin-top:8px;">👥 Bienestar y Capacitación</div>
-                            <button class="faq-item" onclick="enviarFAQ('¿Qué programas de bienestar ofrece la Rama Judicial en Bucaramanga?')">¿Qué programas de bienestar hay?</button>
-                            <button class="faq-item" onclick="enviarFAQ('¿Cómo inscribirse en las capacitaciones de la Escuela Judicial?')">¿Cómo inscribirse en capacitaciones?</button>
-                            <button class="faq-item" onclick="enviarFAQ('¿Qué es el plan de bienestar e incentivos de la Rama Judicial?')">¿Qué es el plan de bienestar e incentivos?</button>
-                            <button class="faq-item" onclick="enviarFAQ('¿Cómo afiliarse al fondo de empleados de la Rama Judicial?')">¿Cómo afiliarse al fondo de empleados?</button>
+                            
                             <div class="faq-seccion-titulo" style="margin-top:8px;">👥 Vinculación y Carrera Judicial</div>
                             <button class="faq-item" onclick="enviarFAQ('¿Cómo funciona la carrera judicial en Colombia?')">¿Cómo funciona la carrera judicial?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Qué es el escalafón de la carrera judicial?')">¿Qué es el escalafón de la carrera judicial?</button>
@@ -634,9 +623,7 @@
                         </div>
 
                         <!-- SIERJU -->
-                        <div id="faq-sierju" class="faq-section" style="display:none;">
-                            <div class="faq-seccion-titulo">📊 SIERJU — General</div>
-                            <button class="faq-item" onclick="enviarFAQ('¿Qué es el SIERJU?')">¿Qué es el SIERJU?</button>
+                                                    <button class="faq-item" onclick="enviarFAQ('¿Qué es el SIERJU?')">¿Qué es el SIERJU?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Para qué sirve el SIERJU?')">¿Para qué sirve el SIERJU?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Cuándo debo reportar en el SIERJU?')">¿Cuándo debo reportar en el SIERJU?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Qué pasa si no reporto a tiempo?')">¿Qué pasa si no reporto a tiempo?</button>
@@ -650,13 +637,10 @@
                             <button class="faq-item" onclick="enviarFAQ('¿Qué son egresos en el SIERJU?')">¿Qué son egresos?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Qué es carga laboral en el SIERJU?')">¿Qué es carga laboral?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Cómo corrijo un error en el SIERJU?')">¿Cómo corrijo un error en el SIERJU?</button>
-                            <button class="faq-item" onclick="enviarFAQ('¿Qué hacer si hay problema técnico con el SIERJU?')">¿Qué hacer si hay problema técnico?</button>
                         </div>
 
                         <!-- Normativa -->
-                        <div id="faq-normativa" class="faq-section" style="display:none;">
-                            <div class="faq-seccion-titulo">📜 Normativa — Acuerdos</div>
-                            <button class="faq-item" onclick="enviarFAQ('¿De qué trata el Acuerdo PSAA16-10476?')">¿De qué trata el Acuerdo PSAA16-10476?</button>
+                                                    <button class="faq-item" onclick="enviarFAQ('¿De qué trata el Acuerdo PSAA16-10476?')">¿De qué trata el Acuerdo PSAA16-10476?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿De qué trata el Acuerdo PCSJA19-11207?')">¿De qué trata el Acuerdo PCSJA19-11207?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿De qué trata el Acuerdo PCSJA25-12324?')">¿De qué trata el Acuerdo PCSJA25-12324?</button>
                             <div class="faq-seccion-titulo" style="margin-top:8px;">📜 Normativa — Sanciones y deberes</div>
@@ -667,9 +651,7 @@
                         </div>
 
                         <!-- Juzgados -->
-                        <div id="faq-juzgados" class="faq-section" style="display:none;">
-                            <div class="faq-seccion-titulo">⚖️ Juzgados Civiles</div>
-                            <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Civil Municipal?')">Juzgado Civil Municipal</button>
+                                                    <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Civil Municipal?')">Juzgado Civil Municipal</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Civil del Circuito?')">Juzgado Civil del Circuito</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado Civil de Ejecución de Sentencias?')">Civil Ejecución de Sentencias</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Cómo diligenciar el SIERJU en Juzgado de Familia?')">Juzgado de Familia</button>
@@ -693,9 +675,7 @@
                         </div>
 
                         <!-- Administrativo -->
-                        <div id="faq-administrativo" class="faq-section" style="display:none;">
-                            <div class="faq-seccion-titulo">🏛️ Soporte y Administración</div>
-                            <button class="faq-item" onclick="enviarFAQ('¿Quién capacita en el uso del SIERJU?')">¿Quién capacita en el SIERJU?</button>
+                                                    <button class="faq-item" onclick="enviarFAQ('¿Quién capacita en el uso del SIERJU?')">¿Quién capacita en el SIERJU?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Qué hace el Administrador Seccional en el SIERJU?')">¿Qué hace el Administrador Seccional?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Qué es la UDAE?')">¿Qué es la UDAE?</button>
                             <button class="faq-item" onclick="enviarFAQ('¿Cómo reportar un problema técnico con el SIERJU?')">¿Cómo reportar un problema técnico?</button>
@@ -1245,7 +1225,7 @@ setInterval(async () => {
 // Si el servidor reporta una versión distinta a la del HTML cargado
 // en el navegador → recarga forzada, ignorando caché local.
 // Garantiza que todos los equipos en red siempre usen la versión actual.
-const VERSION_ACTUAL = '2.1.27';  // ← debe coincidir con lo que reporta el proxy
+const VERSION_ACTUAL = '3.1.0-alpha';  // ← debe coincidir con lo que reporta el proxy
 
 async function verificarVersion() {
     try {
